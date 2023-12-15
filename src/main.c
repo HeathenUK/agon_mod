@@ -377,7 +377,7 @@ int main(int argc, char * argv[])
 			clear_buffer(i);
 			add_stream_to_buffer(i, temp_sample_buffer, sample_length_swapped * 2);
 			free(temp_sample_buffer);
-			tuneable_sample_from_buffer(i, 16, 16000);
+			tuneable_sample_from_buffer(i, 8000);
 
 		}
 
