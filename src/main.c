@@ -64,9 +64,17 @@ typedef struct {
 
 } mod_header;
 
+typedef struct {
+
+	uint16_t latched_sample;
+	//Much more to come!
+
+} channel_data;
+
 #pragma pack(pop)
 
 mod_header mod;
+channel_data *channels_data = NULL;
 
 // Parameters:
 // - argc: Argument count
@@ -302,22 +310,22 @@ void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
 	
 }
 
-void process_note(uint8_t *buffer, size_t channels, size_t pattern_no, size_t row)  {
+void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
-	size_t offset = (channels * 4 * 64) * pattern_no + (row * 4 * channels);
+	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
 	uint8_t *noteData = buffer + offset;
 
-	putch(17);
-	putch(15);
+	// putch(17);
+	// putch(15);
 
-	printf("T%05u", ticker);
+	// printf("T%04u", ticker);
 
-	putch(17);
-	putch(7);
- 	printf(" || ");
+	// putch(17);
+	// putch(7);
+	// printf("|");	
 
-	for (uint8_t i = 0; i < (channels - 1); i++) {
+	for (uint8_t i = 0; i < (mod.channels - 1); i++) {
 
 		putch(17);
 		putch(9 + i);
@@ -326,24 +334,26 @@ void process_note(uint8_t *buffer, size_t channels, size_t pattern_no, size_t ro
 		uint8_t effect_number = (noteData[2] & 0xF);
 		uint8_t effect_param = noteData[3];
 		uint16_t period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+		uint16_t hz = period > 0 ? 187815 / period: 0;
 
 		// Output the decoded note information
 		
-		printf("%03u %02u %X%02X", period, sample_number, effect_number, effect_param);
+		printf("%03u (%04uHz) %02u %X%02X", period, hz, sample_number, effect_number, effect_param);
 		if (sample_number > 0) {
-
+			channels_data[i].latched_sample = sample_number;
 			//void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency)
-			play_sample(sample_number, i, 120, 0, 500);
+			if (period > 0) play_sample(channels_data[i].latched_sample, i, 120, 0, hz);
+			else play_sample(channels_data[i].latched_sample, i, 0, 0, hz); //Latch a new sample but don't play it (audibly).
 
 		} else if (period > 0) {
 
-			play_channel(i, 120, 0, 500);
+			play_channel(i, 120, 0, hz);
 
 		}
 
 		putch(17);
 		putch(7);
-		printf(" || ");		
+		printf("|");		
 		noteData += 4;
 
 	}
@@ -355,15 +365,18 @@ void process_note(uint8_t *buffer, size_t channels, size_t pattern_no, size_t ro
 	uint8_t effect_number = (noteData[2] & 0xF);
 	uint8_t effect_param = noteData[3];
 	uint16_t period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
-	printf("%03u %02u %X%02X", period, sample_number, effect_number, effect_param);
+	uint16_t hz = period > 0 ? 187815 / period: 0;
+	printf("%03u (%04uHz) %02u %X%02X", period, hz, sample_number, effect_number, effect_param);
 	if (sample_number > 0) {
 
+		channels_data[mod.channels].latched_sample = sample_number;
 		//void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency)
-		play_sample(sample_number, 3, 120, 0, 500);
+		if (period > 0) play_sample(channels_data[mod.channels].latched_sample, 3, 120, 0, hz);
+		else play_sample(channels_data[mod.channels].latched_sample, 3, 0, 0, 0); //Latch a new sample but don't play it (audibly).
 
 	} else if (period > 0) {
 
-		play_channel(3, 120, 0, 500);
+		if (channels_data[mod.channels].latched_sample > 0)	play_channel(3, 120, 0, hz);
 
 	}
 
@@ -391,7 +404,7 @@ int main(int argc, char * argv[])
 		putch(0);
 	}
 
-	set_channel_rate(255, 44100);
+	set_channel_rate(255, 36000);
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
@@ -405,10 +418,14 @@ int main(int argc, char * argv[])
 
 	}
 
-	for (uint8_t i = 0; i < mod.channels; i++) enable_channel(i);
+	channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
+	for (uint8_t i = 0; i < mod.channels; i++) {
+		enable_channel(i);
+		channels_data[i].latched_sample = 0;
+	}
 
 	mod.pattern_max = 0;
-	mod.current_speed = 6;
+	mod.current_speed = argc == 3 ? argv[2] : 6;
 	mod.current_bpm = 125;
 
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
@@ -450,16 +467,13 @@ int main(int argc, char * argv[])
 	timer0_begin(23040, 16);
 	uint8_t pattern = 0, row = 0;
 	uint24_t old_ticker = ticker;
-	process_note(mod.pattern_buffer, mod.channels, pattern, row++); //Show row (note) 0 of pattern 2
-	// process_note(mod.pattern_buffer, mod.channels, pattern, row++); //Show row (note) 1 of pattern 2
-	// process_note(mod.pattern_buffer, mod.channels, pattern, row++); //Show row (note) 2 of pattern 2
-	// process_note(mod.pattern_buffer, mod.channels, pattern, row++); //Show row (note) 3 of pattern 2
+	process_note(mod.pattern_buffer, pattern, row++);
 
-	#if 1 //Spams the screen but validates pattern data
+	#if 1 //Play the rest of the pattern
 
 	while (1) {
 		if ((ticker - old_ticker) >= mod.current_speed) {
-			process_note(mod.pattern_buffer, mod.channels, pattern, row++);
+			process_note(mod.pattern_buffer, pattern, row++);
 			old_ticker = ticker;
 
 			if (row == 64) {
@@ -470,12 +484,8 @@ int main(int argc, char * argv[])
 
 	#endif
 
-	//play_sample(0, 0, 64, (swap_word(mod.header.sample[0].SAMPLE_LENGTH) * 2 * 1000) / 8363, 523);
-	//play_sample(0, 0, 64, 0, 659);
-
-	//while (ticker < 500) {}
-
 	//set_channel_rate(255, 16384);
+	free(channels_data);
 	fclose(file);
 	timer0_end();
 
