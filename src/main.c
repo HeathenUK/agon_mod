@@ -245,7 +245,7 @@ void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
 	putch(23);
 	putch(0);
 	putch(0x85);	
-	putch(0);
+	putch(0); //Ignored
 	putch(5);
 	putch(2);
 	write16bit(buffer_id);
@@ -300,7 +300,7 @@ void clear_buffer(uint16_t buffer_id) {
 	putch(0);
 	putch(0xA0);
 	write16bit(buffer_id);
-	putch(2);	
+	putch(2);
 	
 }
 
@@ -329,8 +329,10 @@ int main(int argc, char * argv[])
         return 0;
     }
 
-	putch(22);
-	putch(0);
+	if (sv->scrMode > 0) {
+		putch(22);
+		putch(0);
+	}
 
 	mod_header mod;
 
@@ -377,7 +379,7 @@ int main(int argc, char * argv[])
 			clear_buffer(i);
 			add_stream_to_buffer(i, temp_sample_buffer, sample_length_swapped * 2);
 			free(temp_sample_buffer);
-			tuneable_sample_from_buffer(i, 8000);
+			tuneable_sample_from_buffer(i, 8363);
 
 		}
 
