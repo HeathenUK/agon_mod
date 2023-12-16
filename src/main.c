@@ -66,6 +66,8 @@ typedef struct {
 
 #pragma pack(pop)
 
+mod_header mod;
+
 // Parameters:
 // - argc: Argument count
 // - argv: Pointer to the argument string - zero terminated, parameters separated by spaces
@@ -317,6 +319,28 @@ void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
 	
 }
 
+void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(13);
+	write16bit(sample_rate);
+	
+}
+
+void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(12);
+	write24bit(duration);
+	
+}
+
 int main(int argc, char * argv[])
 //int main(void)
 {
@@ -334,8 +358,6 @@ int main(int argc, char * argv[])
 		putch(0);
 	}
 
-	mod_header mod;
-
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) mod.channels = 4; //Classic 4 channels
@@ -349,6 +371,8 @@ int main(int argc, char * argv[])
 	}
 
 	mod.pattern_max = 0;
+	mod.current_speed = 6;
+	mod.current_bpm = 125;
 
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
 
@@ -397,7 +421,7 @@ int main(int argc, char * argv[])
 	#if 0 //Spams the screen but validates pattern data
 
 	while (1) {
-		if ((ticker - old_ticker) >= 6) {
+		if ((ticker - old_ticker) >= mod.current_speed) {
 			process_note(mod.pattern_buffer, mod.channels, pattern, row++);
 			old_ticker = ticker;
 
@@ -409,10 +433,10 @@ int main(int argc, char * argv[])
 
 	#endif
 
-	play_sample(0, 0, 64, 0, 523);
+	play_sample(0, 0, 64, (swap_word(mod.header.sample[0].SAMPLE_LENGTH) * 2 * 1000) / 8363, 523);
 
 	fclose(file);
-	//timer0_end();
+	timer0_end();
 
 	return 0;
 }
