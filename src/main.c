@@ -398,7 +398,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
-		if (i != 2) {
+		//if (i == 3) {
 		
 		if (sample_number > 0) {
 			
@@ -425,7 +425,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 
 		}
 
-		}
+		//}
 
 		if (verbose) {
 		
@@ -487,7 +487,7 @@ int main(int argc, char * argv[])
 	}
 
 	channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
-	for (uint8_t i = 0; i < mod.channels - 1; i++) {
+	for (uint8_t i = 0; i < mod.channels; i++) {
 		enable_channel(i);
 		channels_data[i].latched_sample = 0;
 		channels_data[i].latched_volume = 0;
@@ -542,6 +542,8 @@ int main(int argc, char * argv[])
 
 	}
 	
+	bool verbose = false;
+
 	ticker = 0;
 	//timer0_begin(23040, 16);
 	timer0_begin(23500, 16); //Slightly faster time to offset other cycles swallowed.
@@ -549,13 +551,13 @@ int main(int argc, char * argv[])
 	uint24_t old_ticker = ticker;
 	
 	printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
-	process_note(mod.pattern_buffer, mod.header.order[order], row++, true);
+	process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose);
 
 	while (1) {
 
 		if ((ticker - old_ticker) >= mod.current_speed) {
 
-			process_note(mod.pattern_buffer, mod.header.order[order], row++, true);
+			process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose);
 			
 			old_ticker = ticker;
 			if (sv->keyascii == 27) break;
