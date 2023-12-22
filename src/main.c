@@ -329,6 +329,36 @@ void wait_tick(uint16_t ticks) {
 
 }
 
+void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
+
+	//VDU 23, 0, &85, channel, 5, 6, bufferId; repeatStart; repeatStartHighByte
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(0);
+	putch(5);
+	putch(6);
+	write16bit(sample_id);
+	write24bit(start);
+
+}
+
+void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+
+	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(0);
+	putch(5);
+	putch(8);
+	write16bit(sample_id);
+	write24bit(length);
+
+}
+
 void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
@@ -340,44 +370,66 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 		putch(17);
 		putch(15);
 
-		printf("%02u ", row);
+		printf("\r\n%02u ", row);
 
 	}
 
-	for (uint8_t i = 0; i < (mod.channels - 1); i++) {
+	uint8_t sample_number;
+	uint8_t effect_number;
+	uint8_t effect_param;
+	uint16_t period;
+	uint16_t hz;
+
+	for (uint8_t i = 0; i < mod.channels; i++) {
 
 		if (verbose) {
 
 			putch(17);
 			putch(9 + i);
-		
+			
 		}
 
-		uint8_t sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
-		uint8_t effect_number = (noteData[2] & 0xF);
-		uint8_t effect_param = noteData[3];
-		uint16_t period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
-		uint16_t hz = period > 0 ? 187815 / period: 0;
+		sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
+		effect_number = (noteData[2] & 0xF);
+		effect_param = noteData[3];
+		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+		hz = period > 0 ? 187815 / period: 0;
 
 		// Output the decoded note information
+		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
+		
+		if (i != 2) {
 		
 		if (sample_number > 0) {
 			
 			channels_data[i].latched_sample = sample_number;
 			channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
-			//void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency)
-			if (period > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-			//else play_sample(channels_data[i].latched_sample, i, 0, 0, hz); //Latch a new sample but don't play it (audibly).
+
+			if (period > 0) {	
+				
+				reset_channel(i);
+				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+
+			}
 
 		} else if (period > 0) {
 
-			if (channels_data[i].latched_sample > 0) play_channel(i, channels_data[i].latched_volume, 0, hz);
+			if (channels_data[i].latched_sample > 0) {
+				
+				reset_channel(i);
+				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+
+			}
+
+		}
 
 		}
 
 		if (verbose) {
 		
-		printf("%03u/%03u %02u %03u %X%02X", period, hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
+		printf("%04uHz %02u %03u %X%02X", hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
 
 		putch(17);
 		putch(7);
@@ -389,43 +441,20 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 
 	}
 
-	if (verbose) {
+}
+
+void delay_cents(uint16_t ticks_end) { //100ms ticks
 	
-		putch(17);
-		putch(12);
-
-	}
-
-	uint8_t sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
-	uint8_t effect_number = (noteData[2] & 0xF);
-	uint8_t effect_param = noteData[3];
-	uint16_t period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
-	uint16_t hz = period > 0 ? 187815 / period: 0;
-
-	if (sample_number > 0) {
+	uint16_t ticks = 0;
+	ticks_end *= 6;
+	while(true) {
 		
-		channels_data[mod.channels - 1].latched_sample = sample_number;
-		channels_data[mod.channels - 1].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
-		//void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency)
-		if (period > 0) play_sample(channels_data[mod.channels - 1].latched_sample, mod.channels - 1, channels_data[mod.channels - 1].latched_volume, 0, hz);
-		//else play_sample(channels_data[mod.channels - 1].latched_sample, mod.channels - 1, 0, 0, 0); //Latch a new sample but don't play it (audibly).
-
-	} else if (period > 0) {
-
-		if (channels_data[mod.channels - 1].latched_sample > 0)	play_channel(mod.channels - 1, channels_data[mod.channels - 1].latched_volume, 0, hz);
-
+		waitvblank();
+		ticks++;
+		if(ticks >= ticks_end) break;
+		
 	}
-
-	if (verbose) {
-
-		printf("%03u/%03u %02u %03u %X%02X", period, hz, sample_number, channels_data[mod.channels - 1].latched_volume, effect_number, effect_param);
-
-		printf("\r\n");
-		putch(17);
-		putch(15);	
 	
-	}
-
 }
 
 int main(int argc, char * argv[])
@@ -485,8 +514,11 @@ int main(int argc, char * argv[])
 	for (uint8_t i = 1; i < 31; i++) {
 
 		uint16_t sample_length_swapped = swap_word(mod.header.sample[i - 1].SAMPLE_LENGTH);
+		uint16_t sample_loop_start_swapped = swap_word(mod.header.sample[i - 1].LOOP_START);
+		uint16_t sample_loop_length_swapped = swap_word(mod.header.sample[i - 1].LOOP_LENGTH);
+
 		if (sample_length_swapped > 0) {
-			printf("Uploading sample %u (%u bytes) with default volume %u\r\n", i, sample_length_swapped * 2, mod.header.sample[i - 1].VOLUME);
+			printf("Uploading sample %u (%u bytes) with default volume %u and loop start %u\r\n", i, sample_length_swapped * 2, mod.header.sample[i - 1].VOLUME, sample_loop_start_swapped * 2);
 
 			temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * sample_length_swapped * 2);
 			
@@ -499,34 +531,46 @@ int main(int argc, char * argv[])
 			free(temp_sample_buffer);
 			tuneable_sample_from_buffer(i, 8363);
 
-			//for (uint8_t j = 0; j < mod.channels - 1; j++) play_sample(i, j, 0, -1, 523);
+		}
+
+		if (sample_loop_start_swapped > 0) {
+
+			set_sample_loop_start(i, sample_loop_start_swapped * 2);
+			set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
 		}
 
 	}
 	
 	ticker = 0;
-	timer0_begin(23040, 16);
+	//timer0_begin(23040, 16);
+	timer0_begin(23500, 16); //Slightly faster time to offset other cycles swallowed.
 	uint8_t order = 0, row = 0;
 	uint24_t old_ticker = ticker;
-	process_note(mod.pattern_buffer, mod.header.order[order], row++, false);
-
+	
+	printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
+	process_note(mod.pattern_buffer, mod.header.order[order], row++, true);
 
 	while (1) {
+
 		if ((ticker - old_ticker) >= mod.current_speed) {
-			process_note(mod.pattern_buffer, mod.header.order[order], row++, false);
+
+			process_note(mod.pattern_buffer, mod.header.order[order], row++, true);
 			
 			old_ticker = ticker;
 			if (sv->keyascii == 27) break;
 
 			if (row == 64) {
 				order++;
-				if (order > mod.header.num_orders) break;
+				if (order > mod.header.num_orders - 1) break;
+				printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
 				row = 0;
 			}
 		}
 
 	}
+
+	for (uint8_t i = 0; i < mod.channels - 1; i++) reset_channel(i);
 
 	free(channels_data);
 	fclose(file);
