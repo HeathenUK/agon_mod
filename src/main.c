@@ -68,7 +68,7 @@ typedef struct {
 
 	uint16_t latched_sample;
 	uint8_t latched_volume;
-	uint8_t current_volume;
+	int16_t current_volume;
 	uint8_t current_effect;
 	uint8_t current_effect_param;
 	//Much more to come!
@@ -258,6 +258,19 @@ void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t d
 
 }
 
+void set_volume(uint8_t channel, uint8_t volume) {
+
+	//VDU 23, 0, &85, channel, 2, volume
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(2);
+	putch(volume);
+
+}
+
 void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
 
 	putch(23);
@@ -362,7 +375,9 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 }
 
-void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose, uint8_t enabled)  {
+bool verbose = false;
+
+void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enabled)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
@@ -412,6 +427,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose, 
 				
 				channels_data[i].latched_sample = sample_number;
 				channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
+				channels_data[i].current_volume = channels_data[i].latched_volume;
 
 
 				if (period > 0) {	
@@ -465,8 +481,22 @@ void process_tick() {
 					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
 					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
 					
-					if (slide_x) printf("\r\nSlide tick on %u, increase by %u per tick.", i, slide_x);
-					else printf("\r\nSlide tick on %u, decrease by %u per tick.", i, slide_y);
+					if (slide_x) {
+
+						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						channels_data[i].current_volume += slide_adjusted;
+						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+						if (verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+
+					} else {
+
+						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						channels_data[i].current_volume -= slide_adjusted;
+						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+						if (verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+					}
 
 				}			
 				default:
@@ -581,7 +611,7 @@ int main(int argc, char * argv[])
 
 	}
 	
-	bool verbose = true;
+	verbose = false;
 
 	ticker = 0;
 	//timer0_begin(23040, 16);
@@ -592,9 +622,12 @@ int main(int argc, char * argv[])
 	uint16_t old_key_count = sv->vkeycount;
 	
 	printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
-	process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose, enabled);
+	process_note(mod.pattern_buffer, mod.header.order[order], row++, enabled);
 
-	uint8_t mid_tick = 0, tick = 0;
+	uint24_t tick = 0;
+	uint8_t mid_tick;
+
+	bool do_ticks = true;
 
 	while (1) {
 
@@ -606,6 +639,8 @@ int main(int argc, char * argv[])
 			if (sv->vkeycount != old_key_count) {
 
 				if (sv->keyascii == 27) break;
+
+				if (sv->keyascii == 't') do_ticks = !do_ticks;
 				
 				if (sv->keyascii == '1') enabled = enabled ^ 0x01;
 				if (sv->keyascii == '2') enabled = enabled ^ 0x02;
@@ -617,7 +652,7 @@ int main(int argc, char * argv[])
 
 			}
 
-			process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose, enabled);
+			process_note(mod.pattern_buffer, mod.header.order[order], row++, enabled);
 
 			if (row == 64) {
 				order++;
@@ -625,13 +660,14 @@ int main(int argc, char * argv[])
 				printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
 				row = 0;
 			}
-			
+
 		} else if (ticker - tick > 0) { //We're in between rows
 
 			if (mid_tick++ < mod.current_speed) {
 
 				tick = ticker;
-				printf("\r\nTick %u", mid_tick);
+				//printf("\r\nTick %u", mid_tick);
+				if (do_ticks) process_tick();
 
 			}
 
