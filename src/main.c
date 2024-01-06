@@ -68,6 +68,9 @@ typedef struct {
 
 	uint16_t latched_sample;
 	uint8_t latched_volume;
+	uint8_t current_volume;
+	uint8_t current_effect;
+	uint8_t current_effect_param;
 	//Much more to come!
 
 } channel_data;
@@ -359,7 +362,7 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 }
 
-void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose)  {
+void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose, uint8_t enabled)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
@@ -395,37 +398,43 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 		hz = period > 0 ? 187815 / period: 0;
 
+		if (effect_number) {
+			channels_data[i].current_effect = effect_number;
+			channels_data[i].current_effect_param = effect_param;
+		}
+
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
-		//if (i == 3) {
+		if ((enabled & (1 << i)) != 0) {
 		
-		if (sample_number > 0) {
-			
-			channels_data[i].latched_sample = sample_number;
-			channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
-
-			if (period > 0) {	
+			if (sample_number > 0) {
 				
-				reset_channel(i);
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+				channels_data[i].latched_sample = sample_number;
+				channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
 
-			}
 
-		} else if (period > 0) {
+				if (period > 0) {	
+					
+					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+					channels_data[i].current_volume = channels_data[i].latched_volume;					
 
-			if (channels_data[i].latched_sample > 0) {
-				
-				reset_channel(i);
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+				}
+
+			} else if (period > 0) {
+
+				if (channels_data[i].latched_sample > 0) {
+					
+					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+					channels_data[i].current_volume = channels_data[i].latched_volume;
+
+				}
 
 			}
 
 		}
-
-		//}
 
 		if (verbose) {
 		
@@ -438,6 +447,32 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, bool verbose) 
 		}
 
 		noteData += 4;
+
+	}
+
+}
+
+void process_tick() {
+
+	for (uint8_t i = 0; i < mod.channels; i++) {
+
+		if (channels_data[i].current_effect != 0xFF)
+		
+			switch (channels_data[i].current_effect) {
+				case 0x0A:
+				{
+
+					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
+					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
+					
+					if (slide_x) printf("\r\nSlide tick on %u, increase by %u per tick.", i, slide_x);
+					else printf("\r\nSlide tick on %u, decrease by %u per tick.", i, slide_y);
+
+				}			
+				default:
+					break;
+
+			}		
 
 	}
 
@@ -474,6 +509,8 @@ int main(int argc, char * argv[])
 		putch(0);
 	}
 
+	set_channel_rate(-1, 8363);
+
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) mod.channels = 4; //Classic 4 channels
@@ -491,6 +528,8 @@ int main(int argc, char * argv[])
 		enable_channel(i);
 		channels_data[i].latched_sample = 0;
 		channels_data[i].latched_volume = 0;
+		channels_data[i].current_effect = 0xFF;
+		channels_data[i].current_effect_param = 0;
 		
 	}
 	mod.pattern_max = 0;
@@ -542,25 +581,43 @@ int main(int argc, char * argv[])
 
 	}
 	
-	bool verbose = false;
+	bool verbose = true;
 
 	ticker = 0;
 	//timer0_begin(23040, 16);
 	timer0_begin(23500, 16); //Slightly faster time to offset other cycles swallowed.
 	uint8_t order = 0, row = 0;
 	uint24_t old_ticker = ticker;
+	uint8_t enabled = 255;
+	uint16_t old_key_count = sv->vkeycount;
 	
 	printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
-	process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose);
+	process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose, enabled);
+
+	uint8_t mid_tick = 0, tick = 0;
 
 	while (1) {
 
 		if ((ticker - old_ticker) >= mod.current_speed) {
 
-			process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose);
-			
-			old_ticker = ticker;
-			if (sv->keyascii == 27) break;
+			old_ticker = ticker, tick = ticker;
+			mid_tick = 0;
+
+			if (sv->vkeycount != old_key_count) {
+
+				if (sv->keyascii == 27) break;
+				
+				if (sv->keyascii == '1') enabled = enabled ^ 0x01;
+				if (sv->keyascii == '2') enabled = enabled ^ 0x02;
+				if (sv->keyascii == '3') enabled = enabled ^ 0x04;
+				if (sv->keyascii == '4') enabled = enabled ^ 0x08;
+				if (sv->keyascii == '0') enabled = 255;
+
+				old_key_count = sv->vkeycount;
+
+			}
+
+			process_note(mod.pattern_buffer, mod.header.order[order], row++, verbose, enabled);
 
 			if (row == 64) {
 				order++;
@@ -568,15 +625,27 @@ int main(int argc, char * argv[])
 				printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
 				row = 0;
 			}
+			
+		} else if (ticker - tick > 0) { //We're in between rows
+
+			if (mid_tick++ < mod.current_speed) {
+
+				tick = ticker;
+				printf("\r\nTick %u", mid_tick);
+
+			}
+
 		}
 
 	}
 
-	for (uint8_t i = 0; i < mod.channels - 1; i++) reset_channel(i);
+	for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
 
 	free(channels_data);
 	fclose(file);
 	timer0_end();
+
+	set_channel_rate(-1, 16843);
 
 	return 0;
 }
