@@ -61,6 +61,8 @@ typedef struct {
 	uint8_t *pattern_buffer;
 	uint8_t current_speed;
 	uint8_t current_bpm;
+	uint8_t current_order;
+	uint8_t current_row;
 
 } mod_header;
 
@@ -375,7 +377,8 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 }
 
-bool verbose = false;
+bool verbose = true;
+bool extra_verbose = false;
 
 void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enabled)  {
 
@@ -413,10 +416,10 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 		hz = period > 0 ? 187815 / period: 0;
 
-		if (effect_number) {
+		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
 			channels_data[i].current_effect_param = effect_param;
-		}
+		} else channels_data[i].current_effect = 0xFF;
 
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
@@ -472,11 +475,10 @@ void process_tick() {
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
 
-		if (channels_data[i].current_effect != 0xFF)
-		
+		if (channels_data[i].current_effect != 0xFF) {
+
 			switch (channels_data[i].current_effect) {
-				case 0x0A:
-				{
+				case 0x0A: { //Volume slide
 
 					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
 					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
@@ -486,7 +488,7 @@ void process_tick() {
 						uint8_t slide_adjusted = ((slide_x * 2) - 1);
 						channels_data[i].current_volume += slide_adjusted;
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
 
 					} else {
@@ -494,15 +496,30 @@ void process_tick() {
 						uint8_t slide_adjusted = ((slide_y * 2) - 1);
 						channels_data[i].current_volume -= slide_adjusted;
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
 					}
 
-				}			
+				} break;
+
+				case 0x0D: {//Pattern break - Skip to next pattern, row xx
+
+					mod.current_order++;
+					mod.current_row = channels_data[i].current_effect_param;
+					for (uint8_t i = 0; i < mod.channels; i++) {  //Discard any existing effects?
+						channels_data[i].current_effect = 0xFF;
+						channels_data[i].current_effect_param = 0;
+					}					
+					if (extra_verbose) printf("\r\nPattern break to row %u.", channels_data[i].current_effect_param);
+
+				} break;
+
 				default:
 					break;
 
 			}		
+
+		}
 
 	}
 
@@ -539,7 +556,7 @@ int main(int argc, char * argv[])
 		putch(0);
 	}
 
-	set_channel_rate(-1, 8363);
+	set_channel_rate(-1, 16843);
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
@@ -611,18 +628,19 @@ int main(int argc, char * argv[])
 
 	}
 	
-	verbose = false;
+	verbose = true;
+	extra_verbose = false;
 
 	ticker = 0;
 	//timer0_begin(23040, 16);
-	timer0_begin(23500, 16); //Slightly faster time to offset other cycles swallowed.
-	uint8_t order = 0, row = 0;
+	timer0_begin(22500, 16); //Slightly faster time to offset other cycles swallowed.
+	mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint8_t enabled = 255;
 	uint16_t old_key_count = sv->vkeycount;
 	
-	printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
-	process_note(mod.pattern_buffer, mod.header.order[order], row++, enabled);
+	printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++, enabled);
 
 	uint24_t tick = 0;
 	uint8_t mid_tick;
@@ -652,13 +670,13 @@ int main(int argc, char * argv[])
 
 			}
 
-			process_note(mod.pattern_buffer, mod.header.order[order], row++, enabled);
+			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++, enabled);
 
-			if (row == 64) {
-				order++;
-				if (order > mod.header.num_orders - 1) break;
-				printf("\r\nOrder %u (Pattern %u)\r\n", order, mod.header.order[order]);
-				row = 0;
+			if (mod.current_row == 64) {
+				mod.current_order++;
+				if (mod.current_order > mod.header.num_orders - 1) break;
+				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				mod.current_row = 0;
 			}
 
 		} else if (ticker - tick > 0) { //We're in between rows
