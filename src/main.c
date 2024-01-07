@@ -417,7 +417,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 	uint8_t sample_number;
 	uint8_t effect_number;
 	uint8_t effect_param;
-	//uint16_t period;
+	uint16_t period;
 	uint16_t hz;
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
@@ -432,12 +432,15 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
 		effect_number = (noteData[2] & 0xF);
 		effect_param = noteData[3];
-		if (effect_number == 0x03) { //Log the note as the effect's target, but don't use it now.
-			channels_data[i].target_period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
-			if (effect_param > 0) channels_data[i].slide_rate = effect_param;
-		} else {
-			channels_data[i].current_period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+
+		if (effect_number == 0x03 && effect_param > 0) { //Log the note as the effect's target, but don't use it now.
+			channels_data[i].slide_rate = effect_param; //If the effect has a parameter, use it as slide rate.
+			channels_data[i].target_period = period;
+		} else if (period > 0) {
+			channels_data[i].current_period = period;
 		}
+
 		hz = channels_data[i].current_period > 0 ? 187815 / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
@@ -456,8 +459,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 				channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
 				channels_data[i].current_volume = channels_data[i].latched_volume;
 
-
-				if ((channels_data[i].current_period > 0) && (effect_number != 0x03)) {	
+				if ((period > 0) && (effect_number != 0x03)) {	
 					
 					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
@@ -465,7 +467,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 				}
 
-			} else if ((channels_data[i].current_period > 0) && (effect_number != 0x03)) {
+			} else if ((period > 0) && (effect_number != 0x03)) {
 
 				if (channels_data[i].latched_sample > 0) {
 					
@@ -561,7 +563,7 @@ void process_tick() {
 
 				case 0x01: { //Pitch slide (porta) up
 
-					channels_data[i].current_period += channels_data[i].current_effect_param;
+					channels_data[i].current_period -= channels_data[i].current_effect_param;
 					set_frequency(i, 187815 / channels_data[i].current_period);
 					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
 
@@ -569,7 +571,7 @@ void process_tick() {
 
 				case 0x02: { //Pitch slide (porta) down
 
-					channels_data[i].current_period -= channels_data[i].current_effect_param;
+					channels_data[i].current_period += channels_data[i].current_effect_param;
 					set_frequency(i, 187815 / channels_data[i].current_period);
 					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
 
@@ -577,15 +579,19 @@ void process_tick() {
 
 				case 0x03: { //Pitch slide toward target note
 
+					//target_period, latched_period, current_period
+
 					if (channels_data[i].target_period > channels_data[i].current_period) {
 
 						channels_data[i].current_period += channels_data[i].slide_rate;
 						set_frequency(i, 187815 / channels_data[i].current_period);
+						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
 						channels_data[i].current_period -= channels_data[i].slide_rate;
 						set_frequency(i, 187815 / channels_data[i].current_period);
+						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					}
 
