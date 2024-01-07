@@ -64,6 +64,9 @@ typedef struct {
 	uint8_t current_order;
 	uint8_t current_row;
 	bool	pattern_break_pending;
+	bool	order_break_pending;
+	uint8_t new_order;
+	uint8_t new_row;
 
 } mod_header;
 
@@ -77,6 +80,7 @@ typedef struct {
 	uint16_t current_period;
 	uint16_t target_period;
 	uint8_t slide_rate;
+	uint24_t latched_offset;
 	//Much more to come!
 
 } channel_data;
@@ -290,6 +294,19 @@ void set_frequency(uint8_t channel, uint16_t frequency) {
 
 }
 
+void set_position(uint8_t channel, uint24_t position) {
+
+	//VDU 23, 0, &85, channel, 11, position; positionHighByte
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(11);
+	write24bit(position);
+
+}
+
 void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
 
 	putch(23);
@@ -403,7 +420,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 	uint8_t *noteData = buffer + offset;
 
-	mod.pattern_break_pending = false;
+	//mod.pattern_break_pending = false;
 
 	if (verbose) {
 	
@@ -441,6 +458,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 			channels_data[i].current_period = period;
 		}
 
+		if (effect_number == 0x09 && effect_param > 0) channels_data[i].latched_offset = effect_param * 256;
+
 		hz = channels_data[i].current_period > 0 ? 187815 / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
@@ -463,7 +482,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					
 					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-					channels_data[i].current_volume = channels_data[i].latched_volume;					
+					channels_data[i].current_volume = channels_data[i].latched_volume;
+					if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 				}
 
@@ -474,6 +494,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
 					channels_data[i].current_volume = channels_data[i].latched_volume;
+					if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 				}
 
@@ -498,7 +519,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		if (channels_data[i].current_effect != 0xFF) {
 
 			switch (channels_data[i].current_effect) {
-				
+
 				case 0x0C: {//Set channel volume to xx
 
 					channels_data[i].current_volume = (channels_data[i].current_effect_param * 2) - 1;
@@ -509,6 +530,20 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 				} break;
 
+				case 0x0B: {//Skip to order xx
+
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					
+					uint8_t new_order = (param_x * 16) + param_y;
+
+					if (mod.order_break_pending == false) {
+						mod.new_order = new_order;
+						mod.order_break_pending = true;
+					} 
+
+				} break;				
+
 				case 0x0D: {//Pattern break - Skip to next pattern, row xx
 
 					uint8_t param_x = channels_data[i].current_effect_param >> 4;
@@ -517,17 +552,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					uint8_t new_row = (param_x * 10) + param_y;
 
 					if (mod.pattern_break_pending == false) {
-						mod.current_order++;
+						mod.new_row = new_row;
 						mod.pattern_break_pending = true;
-					} 
-
-					mod.current_row = new_row;
-					for (uint8_t i = 0; i < mod.channels; i++) {  //Discard any existing effects?
-						channels_data[i].current_effect = 0xFF;
-						channels_data[i].current_effect_param = 0;
-					}					
-					if (extra_verbose) printf("\r\nPattern break to row %u.", channels_data[i].current_effect_param);
-					printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+					}
 
 				} break;
 
@@ -689,6 +716,8 @@ int main(int argc, char * argv[])
 	mod.pattern_max = 0;
 	mod.current_speed = (argc == 3) ? atoi(argv[2]) : 6;
 	mod.current_bpm = 125;
+	mod.pattern_break_pending = false;
+	mod.order_break_pending = false;
 
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
 
@@ -761,7 +790,7 @@ int main(int argc, char * argv[])
 
 	ticker = 0;
 	//timer0_begin(23040, 16);
-	timer0_begin(22500, 16); //Slightly faster time to offset other cycles swallowed.
+	timer0_begin(22850, 16); //Slightly faster time to offset other cycles swallowed.
 	mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint8_t enabled = 255;
@@ -797,6 +826,33 @@ int main(int argc, char * argv[])
 				old_key_count = sv->vkeycount;
 
 			}
+
+			if (mod.order_break_pending && mod.order_break_pending) { //Combined order and pattern breaks (0x0B and 0x0D on the same row)
+
+				mod.current_order = mod.new_order;
+				mod.current_row = mod.new_row;
+				mod.order_break_pending = false;
+				mod.pattern_break_pending = false;
+				
+				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+
+			} else if (mod.order_break_pending) { //Just an order break (0x0B)
+
+				mod.current_order = mod.new_order;
+				mod.current_row = 0;
+				mod.order_break_pending = false;
+
+				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+
+			} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
+
+				mod.current_order++;
+				mod.current_row = mod.new_row;
+				mod.pattern_break_pending = false;
+
+				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+
+			}			
 
 			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++, enabled);
 
