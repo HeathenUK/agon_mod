@@ -410,7 +410,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		putch(17);
 		putch(15);
 
-		printf("\r\n%02u", row);
+		printf("\r\n%02u ", row);
 
 	}
 
@@ -483,11 +483,11 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 		if (verbose) {
 		
-		printf("%03u/%03u %02u %03u %X%02X", channels_data[i].current_period, hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
+		printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
 
 		putch(17);
 		putch(7);
-		printf("|");		
+		if (i != mod.channels - 1) printf("|");
 
 		}
 
@@ -715,7 +715,7 @@ int main(int argc, char * argv[])
 
 			#define MAX_CHUNK 40000
 
-			if ((sample_length_swapped * 2) > MAX_CHUNK) { //This is a hack for now, unlikely any classic .mod would have a single sample bigger than ~80K
+			if ((sample_length_swapped * 2) > MAX_CHUNK) { //This is a hack for now, unlikely any classic .mod would have a single sample bigger than ~80K but I really should do a looping chunker
 
 				clear_buffer(i);
 				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * MAX_CHUNK);
@@ -744,8 +744,6 @@ int main(int argc, char * argv[])
 			}
 
 			tuneable_sample_from_buffer(i, 8363);
-
-			printf("Done uploading %u\r\n", i);
 
 		}
 
