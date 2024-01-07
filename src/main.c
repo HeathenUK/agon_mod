@@ -63,6 +63,7 @@ typedef struct {
 	uint8_t current_bpm;
 	uint8_t current_order;
 	uint8_t current_row;
+	bool	pattern_break_pending;
 
 } mod_header;
 
@@ -73,6 +74,9 @@ typedef struct {
 	int16_t current_volume;
 	uint8_t current_effect;
 	uint8_t current_effect_param;
+	uint16_t current_period;
+	uint16_t target_period;
+	uint8_t slide_rate;
 	//Much more to come!
 
 } channel_data;
@@ -273,6 +277,19 @@ void set_volume(uint8_t channel, uint8_t volume) {
 
 }
 
+void set_frequency(uint8_t channel, uint16_t frequency) {
+
+	//VDU 23, 0, &85, channel, 3, frequency;
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(3);
+	write16bit(frequency);
+
+}
+
 void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
 
 	putch(23);
@@ -386,19 +403,21 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 	uint8_t *noteData = buffer + offset;
 
+	mod.pattern_break_pending = false;
+
 	if (verbose) {
 	
 		putch(17);
 		putch(15);
 
-		printf("\r\n%02u ", row);
+		printf("\r\n%02u", row);
 
 	}
 
 	uint8_t sample_number;
 	uint8_t effect_number;
 	uint8_t effect_param;
-	uint16_t period;
+	//uint16_t period;
 	uint16_t hz;
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
@@ -413,8 +432,13 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
 		effect_number = (noteData[2] & 0xF);
 		effect_param = noteData[3];
-		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
-		hz = period > 0 ? 187815 / period: 0;
+		if (effect_number == 0x03) { //Log the note as the effect's target, but don't use it now.
+			channels_data[i].target_period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+			if (effect_param > 0) channels_data[i].slide_rate = effect_param;
+		} else {
+			channels_data[i].current_period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
+		}
+		hz = channels_data[i].current_period > 0 ? 187815 / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
@@ -433,7 +457,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 				channels_data[i].current_volume = channels_data[i].latched_volume;
 
 
-				if (period > 0) {	
+				if ((channels_data[i].current_period > 0) && (effect_number != 0x03)) {	
 					
 					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
@@ -441,7 +465,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 				}
 
-			} else if (period > 0) {
+			} else if ((channels_data[i].current_period > 0) && (effect_number != 0x03)) {
 
 				if (channels_data[i].latched_sample > 0) {
 					
@@ -457,7 +481,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 		if (verbose) {
 		
-		printf("%04uHz %02u %03u %X%02X", hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
+		printf("%03u/%03u %02u %03u %X%02X", channels_data[i].current_period, hz, sample_number, channels_data[i].latched_volume, effect_number, effect_param);
 
 		putch(17);
 		putch(7);
@@ -466,6 +490,62 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		}
 
 		noteData += 4;
+
+		//Process effects that should happen immediately
+
+		if (channels_data[i].current_effect != 0xFF) {
+
+			switch (channels_data[i].current_effect) {
+				
+				case 0x0C: {//Set channel volume to xx
+
+					channels_data[i].current_volume = (channels_data[i].current_effect_param * 2) - 1;
+					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+					set_volume(i, channels_data[i].current_volume);
+					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
+
+				} break;
+
+				case 0x0D: {//Pattern break - Skip to next pattern, row xx
+
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					
+					uint8_t new_row = (param_x * 10) + param_y;
+
+					if (mod.pattern_break_pending == false) {
+						mod.current_order++;
+						mod.pattern_break_pending = true;
+					} 
+
+					mod.current_row = new_row;
+					for (uint8_t i = 0; i < mod.channels; i++) {  //Discard any existing effects?
+						channels_data[i].current_effect = 0xFF;
+						channels_data[i].current_effect_param = 0;
+					}					
+					if (extra_verbose) printf("\r\nPattern break to row %u.", channels_data[i].current_effect_param);
+					printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+
+				} break;
+
+				case 0x0F: {//Set speed or tempo
+
+					if (channels_data[i].current_effect_param < 0x20) { //<0x20 means speed (i.e. ticks per row)
+
+						mod.current_speed = channels_data[i].current_effect_param;
+						if (extra_verbose) printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
+
+					}
+
+				} break;				
+
+				default:
+					break;
+
+			}		
+
+		}		
 
 	}
 
@@ -478,6 +558,39 @@ void process_tick() {
 		if (channels_data[i].current_effect != 0xFF) {
 
 			switch (channels_data[i].current_effect) {
+
+				case 0x01: { //Pitch slide (porta) up
+
+					channels_data[i].current_period += channels_data[i].current_effect_param;
+					set_frequency(i, 187815 / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
+
+				} break;
+
+				case 0x02: { //Pitch slide (porta) down
+
+					channels_data[i].current_period -= channels_data[i].current_effect_param;
+					set_frequency(i, 187815 / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
+
+				} break;
+
+				case 0x03: { //Pitch slide toward target note
+
+					if (channels_data[i].target_period > channels_data[i].current_period) {
+
+						channels_data[i].current_period += channels_data[i].slide_rate;
+						set_frequency(i, 187815 / channels_data[i].current_period);
+
+					} else if (channels_data[i].target_period < channels_data[i].current_period) {
+
+						channels_data[i].current_period -= channels_data[i].slide_rate;
+						set_frequency(i, 187815 / channels_data[i].current_period);
+
+					}
+
+				} break;				
+
 				case 0x0A: { //Volume slide
 
 					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
@@ -499,18 +612,6 @@ void process_tick() {
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
 					}
-
-				} break;
-
-				case 0x0D: {//Pattern break - Skip to next pattern, row xx
-
-					mod.current_order++;
-					mod.current_row = channels_data[i].current_effect_param;
-					for (uint8_t i = 0; i < mod.channels; i++) {  //Discard any existing effects?
-						channels_data[i].current_effect = 0xFF;
-						channels_data[i].current_effect_param = 0;
-					}					
-					if (extra_verbose) printf("\r\nPattern break to row %u.", channels_data[i].current_effect_param);
 
 				} break;
 
@@ -606,16 +707,39 @@ int main(int argc, char * argv[])
 		if (sample_length_swapped > 0) {
 			printf("Uploading sample %u (%u bytes) with default volume %u and loop start %u\r\n", i, sample_length_swapped * 2, mod.header.sample[i - 1].VOLUME, sample_loop_start_swapped * 2);
 
-			temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * sample_length_swapped * 2);
+			#define MAX_CHUNK 40000
+
+			if ((sample_length_swapped * 2) > MAX_CHUNK) { //This is a hack for now, unlikely any classic .mod would have a single sample bigger than ~80K
+
+				clear_buffer(i);
+				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * MAX_CHUNK);
+				if (temp_sample_buffer == NULL) return 0;	
+				fread(temp_sample_buffer, sizeof(uint8_t), MAX_CHUNK, file);
+				add_stream_to_buffer(i, temp_sample_buffer, MAX_CHUNK);
+				free(temp_sample_buffer);
+				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * ((sample_length_swapped * 2) - MAX_CHUNK));
+				if (temp_sample_buffer == NULL) return 0;	
+				fread(temp_sample_buffer, sizeof(uint8_t), (sample_length_swapped * 2) - MAX_CHUNK, file);
+				add_stream_to_buffer(i, temp_sample_buffer, (sample_length_swapped * 2) - MAX_CHUNK);
+				free(temp_sample_buffer);
+
+			} else {
 			
-			if (temp_sample_buffer == NULL) return 0;
+				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * sample_length_swapped * 2);
+				
+				if (temp_sample_buffer == NULL) return 0;
 
-			fread(temp_sample_buffer, sizeof(uint8_t), sample_length_swapped * 2, file);
+				fread(temp_sample_buffer, sizeof(uint8_t), sample_length_swapped * 2, file);
 
-			clear_buffer(i);
-			add_stream_to_buffer(i, temp_sample_buffer, sample_length_swapped * 2);
-			free(temp_sample_buffer);
+				clear_buffer(i);
+				add_stream_to_buffer(i, temp_sample_buffer, sample_length_swapped * 2);
+				free(temp_sample_buffer);
+
+			}
+
 			tuneable_sample_from_buffer(i, 8363);
+
+			printf("Done uploading %u\r\n", i);
 
 		}
 
@@ -673,10 +797,12 @@ int main(int argc, char * argv[])
 			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++, enabled);
 
 			if (mod.current_row == 64) {
+
 				mod.current_order++;
-				if (mod.current_order > mod.header.num_orders - 1) break;
+				if (mod.current_order >= mod.header.num_orders - 1) mod.current_order = 0;
 				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
 				mod.current_row = 0;
+
 			}
 
 		} else if (ticker - tick > 0) { //We're in between rows
@@ -700,6 +826,7 @@ int main(int argc, char * argv[])
 	timer0_end();
 
 	set_channel_rate(-1, 16843);
+	printf("\r\n");
 
 	return 0;
 }
