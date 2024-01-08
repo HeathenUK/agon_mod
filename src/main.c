@@ -1,12 +1,3 @@
-/*
- * Title:			Hello World - C example
- * Author:			Dean Belfield
- * Created:			22/06/2022
- * Last Updated:	22/11/2022
- *
- * Modinfo:
- */
- 
 #include <agon/vdp_vdu.h>
 #include <agon/vdp_key.h>
 #include <stdio.h>
