@@ -492,7 +492,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 				if ((period > 0) && (effect_number != 0x03)) {	
 					
-					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
 					channels_data[i].current_volume = channels_data[i].latched_volume;
 					if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
@@ -503,7 +503,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 				if (channels_data[i].latched_sample > 0) {
 					
-					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_START) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+					if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 					else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
 					channels_data[i].current_volume = channels_data[i].latched_volume;
 					if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
@@ -844,8 +844,6 @@ int main(int argc, char * argv[])
 
 	if (sv->scrMode > 0) {
 		putch(22);
-		putch(2);
-		putch(22);
 		putch(0);
 	}
 
@@ -913,7 +911,7 @@ int main(int argc, char * argv[])
 			clear_buffer(i);
 			temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
 			if (temp_sample_buffer == NULL) {
-				printf("\r\nMemory allocation failed.\r\n");
+				printf("\r\nMemory allocation failed (%u KB).\r\n", CHUNK_SIZE);
 				return 0;	
 			}
 
@@ -940,7 +938,7 @@ int main(int argc, char * argv[])
 			set_sample_loop_start(i, sample_loop_start_swapped * 2);
 			set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
-		}
+		} //else set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
 	}
 
