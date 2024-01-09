@@ -877,7 +877,11 @@ void delay_cents(uint16_t ticks_end) { //100ms ticks
 void header_line() {
 
 	//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	putch(17);
+	putch(128 + 15); //White background
 	printf("%02u %03u Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff", mod.current_order, mod.header.order[mod.current_order]);
+	putch(17);
+	putch(128 + 0); //Reset to black background
 	
 }
 
@@ -1009,7 +1013,8 @@ int main(int argc, char * argv[])
 	uint8_t enabled = 255;
 	uint16_t old_key_count = sv->vkeycount;
 	
-	printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	header_line();
 	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++, enabled);
 
 	uint24_t tick = 0;
@@ -1047,7 +1052,8 @@ int main(int argc, char * argv[])
 				mod.order_break_pending = false;
 				mod.pattern_break_pending = false;
 				
-				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				header_line();
 
 			} else if (mod.order_break_pending) { //Just an order break (0x0B)
 
@@ -1055,7 +1061,8 @@ int main(int argc, char * argv[])
 				mod.current_row = 0;
 				mod.order_break_pending = false;
 
-				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				header_line();
 
 			} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
 
@@ -1063,7 +1070,8 @@ int main(int argc, char * argv[])
 				mod.current_row = mod.new_row;
 				mod.pattern_break_pending = false;
 
-				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				header_line();
 
 			}			
 
@@ -1073,7 +1081,8 @@ int main(int argc, char * argv[])
 
 				mod.current_order++;
 				if (mod.current_order >= mod.header.num_orders - 1) mod.current_order = 0;
-				printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				header_line();
 				mod.current_row = 0;
 
 			}
