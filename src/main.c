@@ -721,7 +721,7 @@ void process_tick() {
 
 				case 0x04: {//Vibrato
 					
-					uint8_t delta = sine_table[abs(channels_data[i].vibrato_position)];
+					uint16_t delta = sine_table[abs(channels_data[i].vibrato_position)];
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
@@ -795,7 +795,7 @@ void process_tick() {
 						set_volume(i, channels_data[i].current_volume);
 					}						
 
-					uint8_t delta = sine_table[channels_data[i].vibrato_position & 31];
+					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
@@ -811,7 +811,7 @@ void process_tick() {
 
 				case 0x07: {//Tremolo
 					
-					uint8_t delta = sine_table[channels_data[i].tremolo_position & 31];
+					uint16_t delta = sine_table[channels_data[i].tremolo_position & 31];
   					delta *= channels_data[i].tremolo_depth;
 					delta >>= 6; //Divide by 64
 
