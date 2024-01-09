@@ -79,6 +79,7 @@ typedef struct {
 	uint8_t vibrato_speed;
 	uint8_t vibrato_depth;
 	bool vibrato_retrigger;
+	bool tremolo_retrigger;
 	int8_t tremolo_position;
 	uint8_t tremolo_speed;
 	uint8_t tremolo_depth;		
@@ -595,7 +596,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					uint8_t param_x = channels_data[i].current_effect_param >> 4;
 					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
-					channels_data[i].tremolo_position = 0;
+					if (channels_data[i].tremolo_retrigger == true) channels_data[i].tremolo_position = 0;
 					if (param_x) channels_data[i].tremolo_speed = param_x;
 					if (param_y) channels_data[i].tremolo_depth = param_y;
 
@@ -652,12 +653,19 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					
 					switch (param_x) {
 
-						case 0x04: {//Set waveform
+						case 0x04: {//Set waveform (vibrato)
 
 							if (param_y == 0) channels_data[i].vibrato_retrigger = true;
 							else if (param_y == 4) channels_data[i].vibrato_retrigger = false;
 
 						} break;
+
+						case 0x07: {//Set waveform (tremolo)
+
+							if (param_y == 0) channels_data[i].tremolo_retrigger = true;
+							else if (param_y == 4) channels_data[i].tremolo_retrigger = false;
+
+						} break;						
 
 					}
 
@@ -947,6 +955,7 @@ int main(int argc, char * argv[])
 		channels_data[i].current_effect = 0xFF;
 		channels_data[i].current_effect_param = 0;
 		channels_data[i].vibrato_retrigger = true;
+		channels_data[i].tremolo_retrigger = true;		
 		
 	}
 	mod.pattern_max = 0;
