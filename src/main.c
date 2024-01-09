@@ -584,7 +584,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					uint8_t param_x = channels_data[i].current_effect_param >> 4;
 					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
-					if (channels_data[i].vibrato_retrigger = true) channels_data[i].vibrato_position = 0;
+					if (channels_data[i].vibrato_retrigger == true) channels_data[i].vibrato_position = 0;
 					if (param_x) channels_data[i].vibrato_speed = param_x;
 					if (param_y) channels_data[i].vibrato_depth = param_y;
 
