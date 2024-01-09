@@ -484,6 +484,12 @@ uint16_t clamp_period(uint16_t period) {
     else return period;
 }
 
+int8_t clamp_volume(int8_t volume) {
+    if (volume < 0) return 0;
+    else if (volume > 127) return 127;
+    else return volume;
+}
+
 void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
@@ -545,8 +551,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		if (sample_number > 0) {
 			
 			channels_data[i].latched_sample = sample_number;
-			channels_data[i].latched_volume = (mod.header.sample[sample_number - 1].VOLUME * 2) - 1;
-			channels_data[i].current_volume = channels_data[i].latched_volume;
+			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
+			channels_data[i].current_volume = channels_data[i].latched_volume;				
 
 			if ((period > 0) && (effect_number != 0x03)) {	
 				
@@ -990,7 +996,7 @@ int main(int argc, char * argv[])
 		
 	}
 	mod.pattern_max = 0;
-	mod.current_speed = (argc == 3) ? atoi(argv[2]) : 6;
+	mod.current_speed = 6;
 	mod.current_bpm = 125;
 	mod.pattern_break_pending = false;
 	mod.order_break_pending = false;
@@ -1071,7 +1077,7 @@ int main(int argc, char * argv[])
 
 	ticker = 0;
 	timer0_begin(23040, 16);
-	//timer0_begin(22850, 16); //Slightly faster time to offset other cycles swallowed.
+	//timer0_begin(23100, 16); //Slightly off from 0.02s
 	mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint16_t old_key_count = sv->vkeycount;
@@ -1157,12 +1163,12 @@ int main(int argc, char * argv[])
 	}
 
 	for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
+	for (uint8_t i = 0; i < mod.sample_total; i++) clear_buffer(i);
 
 	free(channels_data);
 
-	for (uint8_t i = 0; i < mod.sample_total; i++) clear_buffer(i);
-
 	fclose(file);
+	
 	timer0_end();
 
 	//set_channel_rate(-1, 16384);
