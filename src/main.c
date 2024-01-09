@@ -7,6 +7,8 @@
 #include <string.h>
 #include <mos_api.h>
 
+#define CHUNK_SIZE 1024 //Sample upload chunk size in bytes
+
 //ez80 defines
 
 #define TMR0_CTL		0x80
@@ -417,6 +419,53 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 bool verbose = true;
 bool extra_verbose = false;
 
+const char* period_to_note(uint16_t period) {
+
+    switch (period) {
+	  case 0  : return "---";
+
+	  case 856: return "C-1";
+	  case 808: return "C#1";
+	  case 762: return "D-1";
+	  case 720: return "D#1";
+	  case 678: return "E-1";
+	  case 640: return "F-1";
+	  case 604: return "F#1";
+	  case 570: return "G-1";
+	  case 538: return "G#1";
+	  case 508: return "A-1";
+	  case 480: return "A#1";
+	  case 453: return "B-1";
+	  case 428: return "C-2";
+	  case 404: return "C#2";
+	  case 381: return "D-2";
+	  case 360: return "D#2";
+	  case 339: return "E-2";
+	  case 320: return "F-2";
+	  case 302: return "F#2";
+	  case 285: return "G-2";
+	  case 269: return "G#2";
+	  case 254: return "A-2";
+	  case 240: return "A#2";
+	  case 226: return "B-2";
+	  case 214: return "C-3";
+	  case 202: return "C#3";
+	  case 190: return "D-3";
+	  case 180: return "D#3";
+	  case 170: return "E-3";
+	  case 160: return "F-3";
+	  case 151: return "F#3";
+	  case 143: return "G-3";
+	  case 135: return "G#3";
+	  case 127: return "A-3";
+	  case 120: return "A#3";
+	  case 113: return "B-3";
+	 
+	  default: return "???";
+    }
+	
+}
+
 void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enabled)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
@@ -430,7 +479,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		putch(17);
 		putch(15);
 
-		printf("\r\n%02u ", row);
+		//printf("\r\n%02u ", row);
+		printf("\r\n    %02u ", row);
 
 	}
 
@@ -507,11 +557,14 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 
 		if (verbose) {
 		
-		printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].current_volume, effect_number, effect_param);
+		//printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].current_volume, effect_number, effect_param);
+		//printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
+		printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
 
 		putch(17);
 		putch(7);
-		if (i != mod.channels - 1) printf("|");
+		//if (i != mod.channels - 1) printf("|");
+		if (i != mod.channels - 1) printf(" | ");
 
 		}
 
@@ -821,6 +874,13 @@ void delay_cents(uint16_t ticks_end) { //100ms ticks
 	
 }
 
+void header_line() {
+
+	//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	printf("%02u %03u Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff", mod.current_order, mod.header.order[mod.current_order]);
+	
+}
+
 int main(int argc, char * argv[])
 //int main(void)
 {
@@ -892,9 +952,12 @@ int main(int argc, char * argv[])
 
 			mod.sample_total++;
 
-			printf("Uploading sample %u (%u bytes) with default volume %u and loop start %u\r\n", i, sample_length_swapped * 2, mod.header.sample[i - 1].VOLUME, sample_loop_start_swapped * 2);
-
-			#define CHUNK_SIZE 1024
+			printf("Uploading sample %u", i);
+			if (extra_verbose) {
+				printf(" (%02u KB) with default volume %02X", (sample_length_swapped * 2) / 10, mod.header.sample[i - 1].VOLUME);			
+				if (sample_loop_length_swapped) printf(", loop start %05u", sample_loop_start_swapped * 2);
+			}
+			printf("\r\n");
 
 			uint24_t remaining_data = sample_length_swapped * 2;
 			uint16_t chunk;
