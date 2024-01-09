@@ -77,7 +77,8 @@ typedef struct {
 	uint24_t latched_offset;
 	int8_t vibrato_position;
 	uint8_t vibrato_speed;
-	uint8_t vibrato_depth;	
+	uint8_t vibrato_depth;
+	bool vibrato_retrigger;
 	int8_t tremolo_position;
 	uint8_t tremolo_speed;
 	uint8_t tremolo_depth;		
@@ -583,7 +584,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					uint8_t param_x = channels_data[i].current_effect_param >> 4;
 					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
-					channels_data[i].vibrato_position = 0;
+					if (channels_data[i].vibrato_retrigger = true) channels_data[i].vibrato_position = 0;
 					if (param_x) channels_data[i].vibrato_speed = param_x;
 					if (param_y) channels_data[i].vibrato_depth = param_y;
 
@@ -642,6 +643,26 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 					}
 
 				} break;
+
+
+				case 0x0E: {//Extended functions
+
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					
+					switch (param_x) {
+
+						case 0x04: {//Set waveform
+
+							if (param_y == 0) channels_data[i].vibrato_retrigger = true;
+							else if (param_y == 4) channels_data[i].vibrato_retrigger = false;
+
+						} break;
+
+					}
+
+
+				} break;				
 
 				case 0x0F: {//Set speed or tempo
 
@@ -925,6 +946,7 @@ int main(int argc, char * argv[])
 		channels_data[i].latched_volume = 0;
 		channels_data[i].current_effect = 0xFF;
 		channels_data[i].current_effect_param = 0;
+		channels_data[i].vibrato_retrigger = true;
 		
 	}
 	mod.pattern_max = 0;
