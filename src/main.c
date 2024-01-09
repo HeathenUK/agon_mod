@@ -556,7 +556,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row, uint8_t enable
 		}
 
 		if (verbose) {
-		
+
+		//Potential 8 channel layout: printf("%s %X %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
+			
 		//printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].current_volume, effect_number, effect_param);
 		//printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
 		printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
@@ -878,7 +880,7 @@ void header_line() {
 
 	//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
 	putch(17);
-	putch(128 + 15); //White background
+	putch(128 + 7); //Grey background
 	printf("%02u %03u Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff", mod.current_order, mod.header.order[mod.current_order]);
 	putch(17);
 	putch(128 + 0); //Reset to black background
