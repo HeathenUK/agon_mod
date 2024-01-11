@@ -61,6 +61,8 @@ typedef struct {
 	uint8_t new_order;
 	uint8_t new_row;
 	uint8_t sample_total;
+	bool sample_live[32];
+	uint8_t sample_volume[32];
 
 } mod_header;
 
@@ -327,6 +329,24 @@ void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t f
 
 }
 
+void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
+
+	//MOVE x1,y1:MOVE x1+w,y1+h:PLOT 189,x2,y2
+	//PLOT = VDU 25,k,x;y;
+	//MOVE = VDU 25 4 x; y;
+
+	putch(25);
+	putch(4);
+	write16bit(x1);
+	write16bit(y1);
+
+	putch(25);
+	putch(101);
+	write16bit(x2);
+	write16bit(y2);	
+
+}
+
 void clear_buffer(uint16_t buffer_id) {
 	
 	putch(23);
@@ -428,6 +448,17 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 }
 
+void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+
+	putch(28);
+
+	putch(left);
+	putch(bottom);
+	putch(right);
+	putch(top);
+
+}
+
 bool verbose = true;
 bool extra_verbose = false;
 
@@ -504,7 +535,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		putch(15);
 
 		//printf("\r\n%02u ", row);
-		printf("    %02u ", row);
+		printf("%02u", row);
 
 	}
 
@@ -515,6 +546,13 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 	uint16_t hz;
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
+
+		// if (i != 0) {
+		// 	noteData += 4;
+		// 	printf("--- -- -- ---", period_to_note(period), sample_number, channels_data[i].latched_volume, effect_number, effect_param);
+		// 	if (i != mod.channels - 1) printf("  ");
+		// 	continue;
+		// }
 
 		if (verbose) {
 
@@ -549,16 +587,26 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
 		if (sample_number > 0) {
-			
 			channels_data[i].latched_sample = sample_number;
-			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
-			channels_data[i].current_volume = channels_data[i].latched_volume;				
+			
+			if (sample_number != channels_data[i].latched_sample) {
+				mod.sample_volume[channels_data[i].latched_sample] = 1;
+				//channels_data[i].latched_sample = sample_number;
+			}
+
+			channels_data[i].latched_volume = mod.header.sample[channels_data[i].latched_sample - 1].VOLUME;
+
+			if (channels_data[i].current_effect == 0x0C) channels_data[i].latched_volume = channels_data[i].current_effect_param;
+			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
 
 			if ((period > 0) && (effect_number != 0x03)) {	
-				
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				channels_data[i].current_volume = channels_data[i].latched_volume;
+
+				if (swap_word((mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2) > 0) {
+					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), -1, hz);
+				}
+				else {
+					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), 0, hz);
+				}
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 			}
@@ -567,9 +615,13 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 			if (channels_data[i].latched_sample > 0) {
 				
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 0) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				channels_data[i].current_volume = channels_data[i].latched_volume;
+				if (channels_data[i].current_effect == 0x0C) channels_data[i].latched_volume = channels_data[i].current_effect_param;
+
+				if (swap_word((mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2) > 0) {
+					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), -1, hz);
+				} else {
+					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), 0, hz);
+				}
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 			}
@@ -582,12 +634,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			
 		//printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].current_volume, effect_number, effect_param);
 		//printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
-		printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
-
-		putch(17);
-		putch(7);
-		//if (i != mod.channels - 1) printf("|");
-		if (i != mod.channels - 1) printf(" | ");
 
 		}
 
@@ -622,33 +668,23 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				} break;					
 
 				case 0x0B: {//Skip to order xx
-
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
-					
-					uint8_t new_order = (param_x * 16) + param_y;
+			
+					uint8_t new_order = channels_data[i].current_effect_param;
 
 					if (mod.order_break_pending == false) {
 						mod.new_order = new_order;
 						mod.order_break_pending = true;
 					} 
 
-				} break;				
+				} break;
 
-				case 0x0C: {//Set channel volume to xx
+				case 0x0C: {//Set volume
 
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					channels_data[i].latched_volume = channels_data[i].current_effect_param;
+					set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
 
-					uint8_t new_vol = (param_x * 16) + param_y;
 
-					channels_data[i].current_volume = (new_vol * 2) - 1;
-					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-					set_volume(i, channels_data[i].current_volume);
-					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
-
-				} break;				
+				} break;											
 
 				case 0x0D: {//Pattern break - Skip to next pattern, row xx
 
@@ -709,9 +745,38 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 		}		
 
-	}
+		printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, channels_data[i].latched_volume, effect_number, effect_param);
 
-	printf("\r\n");
+		putch(17);
+		putch(7);
+		//if (i != mod.channels - 1) printf("|");
+		if (i != mod.channels - 1) printf("  ");
+
+	}	
+
+	//printf("\r\n");
+	draw_rect(286,18,288,230);
+	draw_rect(286 + 120,18,288 + 120,230);
+	draw_rect(286 + 240,18,288 + 240,230);
+
+}
+
+void fill_empty(uint8_t rows) {
+			
+	for (uint8_t i = 0; i < rows; i++) {
+		putch(17);
+		putch(9);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(10);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(11);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(12);
+		printf("  --- -- -- ---");
+	}
 
 }
 
@@ -798,19 +863,16 @@ void process_tick() {
 
 					if (slide_x) {
 
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
+						channels_data[i].latched_volume += slide_x;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
 
-					} else {
+					} else if (slide_y) {
 
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
+						channels_data[i].latched_volume -= slide_y;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+
 					}					
 
 					if (channels_data[i].target_period > channels_data[i].current_period) {
@@ -838,20 +900,17 @@ void process_tick() {
 
 					if (slide_x) {
 
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
+						channels_data[i].latched_volume += slide_x;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
 
-					} else {
+					} else if (slide_y) {
 
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-					}						
+						channels_data[i].latched_volume -= slide_y;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+
+					}										
 
 					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
   					delta *= channels_data[i].vibrato_depth;
@@ -875,10 +934,8 @@ void process_tick() {
   					delta *= channels_data[i].tremolo_depth;
 					delta >>= 6; //Divide by 64
 
-					if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2));
-					else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2));
-					if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+					if (channels_data[i].tremolo_position < 0) set_volume(i, clamp_volume(channels_data[i].latched_volume - delta) * 2);
+					else if (channels_data[i].tremolo_position >= 0) set_volume(i, clamp_volume(channels_data[i].latched_volume + delta) * 2);
 		
 					//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
@@ -894,20 +951,17 @@ void process_tick() {
 					
 					if (slide_x) {
 
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
+						channels_data[i].latched_volume += slide_x;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
 
-					} else {
+					} else if (slide_y) {
 
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-					}
+						channels_data[i].latched_volume -= slide_y;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
+						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+
+					}		
 
 				} break;
 
@@ -942,18 +996,57 @@ void header_line() {
 	putch(0); //Black foreground
 	putch(17);
 	putch(128 + 7); //Grey background
-	printf("%02u     Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff | Frq Sa Vo Eff", mod.current_order);
+	printf("# Frq Sa Vo Eff  Frq Sa Vo Eff  Frq Sa Vo Eff  Frq Sa Vo Eff"); //58 Chars long (22 from left)
 	putch(17);
 	putch(128 + 0); //Reset to black background
-	printf("          \r\n");
+	//printf("          \r\n");
 	
+}
+
+void logical_coords(bool on) {
+
+	//VDU 23, 0, &C0, n
+	putch(23);
+	putch(0);
+	putch(0xC0);
+	putch(on);
+
+}
+
+void draw_sample_bars() {
+
+	// putch(18);
+	// putch(0);
+	// putch(0); //Black
+	// draw_rect(0,30,160,240);
+	putch(18);
+	putch(0);
+	putch(15);//White
+
+	uint8_t j = 0;
+	for (uint8_t i = 0; i < mod.sample_total; i++) {
+		if (mod.sample_live[i + 1] == true) j++;
+
+		putch(18);
+		putch(0);
+		putch(0); //Black
+		draw_rect(0,30 + (j * 4) + 6,2 + 127,30 + (j * 4) + 8);
+
+		putch(18);
+		putch(0);
+		putch(15); //White		
+		draw_rect(0,30 + (j * 4) + 6,2 + (mod.sample_volume[i + 1] / 2),30 + (j * 4) + 8);
+
+	}
+
 }
 
 uint8_t old_mode;
 
 int main(int argc, char * argv[])
-//int main(void)
 {
+	(void)argc;
+	
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
 
@@ -975,11 +1068,9 @@ int main(int argc, char * argv[])
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) mod.channels = 4; //Classic 4 channels
-	else if (strncmp(mod.header.sig, "6CHN", 4) == 0) mod.channels = 6;
-	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) mod.channels = 8;
 	else {
 
-		printf("Unknown .mod format.\r\n");
+		printf("Unknown .mod format, only classic 4 channel .MODs are supported.\r\n");
 		return 0;
 
 	}
@@ -1001,17 +1092,19 @@ int main(int argc, char * argv[])
 	mod.pattern_break_pending = false;
 	mod.order_break_pending = false;
 
+	for (uint8_t i = 1; i < 31; i++) mod.sample_volume[i] = 1;
+
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
 
 	//Number of patterns * number of channels * number of bytes per note per channel * number of notes per pattern (i.e. 1024 bytes per 4 channel pattern)
 	mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
 	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
 
-	printf("Module name: %s\r\n", mod.header.name);
-	printf("Song length: %u\r\n", mod.header.num_orders);
-	printf("Mod patterns: %u\r\n", mod.pattern_max);
-	printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
-	printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
+	// if (extra_verbose) printf("Module name: %s\r\n", mod.header.name);
+	// if (extra_verbose) printf("Song length: %u\r\n", mod.header.num_orders);
+	// if (extra_verbose) printf("Mod patterns: %u\r\n", mod.pattern_max);
+	// if (extra_verbose) printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
+	// if (extra_verbose) printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
 
 	uint8_t *temp_sample_buffer;
 	mod.sample_total = 0;
@@ -1025,13 +1118,14 @@ int main(int argc, char * argv[])
 		if (sample_length_swapped > 0) {
 
 			mod.sample_total++;
+			mod.sample_live[i] = true;
 
-			printf("Uploading sample %u", i);
-			if (extra_verbose) {
-				printf(" (%02u KB) with default volume %02X", (sample_length_swapped * 2) / 10, mod.header.sample[i - 1].VOLUME);			
-				if (sample_loop_length_swapped) printf(", loop start %05u", sample_loop_start_swapped * 2);
-			}
-			printf("\r\n");
+			// if (extra_verbose) printf("Uploading sample %u", i);
+			// if (extra_verbose) {
+			// 	printf(" (%02u KB) with default volume %02X", (sample_length_swapped * 2) / 10, mod.header.sample[i - 1].VOLUME);			
+			// 	if (sample_loop_length_swapped) printf(", loop start %05u", sample_loop_start_swapped * 2);
+			// }
+			// if (extra_verbose) printf("\r\n");
 
 			uint24_t remaining_data = sample_length_swapped * 2;
 			uint16_t chunk;
@@ -1059,14 +1153,14 @@ int main(int argc, char * argv[])
 
 			tuneable_sample_from_buffer(i, 8363);
 
-		}
+			if ((sample_loop_start_swapped * 2) > 0) {
 
-		if (sample_loop_start_swapped > 0) {
+				set_sample_loop_start(i, sample_loop_start_swapped * 2);
+				set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
-			set_sample_loop_start(i, sample_loop_start_swapped * 2);
-			set_sample_loop_length(i, sample_loop_length_swapped * 2);
+			} //else set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
-		} //else set_sample_loop_length(i, sample_loop_length_swapped * 2);
+		} else mod.sample_live[i] = false;
 
 	}
 
@@ -1076,15 +1170,33 @@ int main(int argc, char * argv[])
 	extra_verbose = false;
 
 	ticker = 0;
-	timer0_begin(23040, 16);
-	//timer0_begin(23100, 16); //Slightly off from 0.02s
+	//timer0_begin(23040, 16);
+	timer0_begin(24000, 16); //Slightly off from 0.02s
 	mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint16_t old_key_count = sv->vkeycount;
 	
 	//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+	putch(0x0C); //CLS
+	
+	//Set up the UI
+	//left, bottom, right, top
+	
+	set_text_window(0,29,22,1);
+
+	printf("Title:\r\n%s\r\n", mod.header.name);
+
+	logical_coords(false);
+	//draw_rect(10,20,30,40);
+	
+	set_text_window(20,2,80,1);
 	header_line();
+	set_text_window(20,29,80,2);
+	fill_empty(27);
+
 	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
+
+	draw_sample_bars();
 
 	uint24_t tick = 0;
 	uint8_t mid_tick;
@@ -1114,7 +1226,7 @@ int main(int argc, char * argv[])
 				mod.pattern_break_pending = false;
 				
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				header_line();
+				//header_line();
 
 			} else if (mod.order_break_pending) { //Just an order break (0x0B)
 
@@ -1123,7 +1235,7 @@ int main(int argc, char * argv[])
 				mod.order_break_pending = false;
 
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				header_line();
+				//header_line();
 
 			} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
 
@@ -1132,18 +1244,19 @@ int main(int argc, char * argv[])
 				mod.pattern_break_pending = false;
 
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				header_line();
+				//header_line();
 
 			}			
 
 			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
+			draw_sample_bars();
 
 			if (mod.current_row == 64) {
 
 				mod.current_order++;
 				if (mod.current_order >= mod.header.num_orders - 1) mod.current_order = 0;
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				header_line();
+				//header_line();
 				mod.current_row = 0;
 
 			}
@@ -1154,7 +1267,10 @@ int main(int argc, char * argv[])
 
 				tick = ticker;
 				//printf("\r\nTick %u", mid_tick);
-				if (do_ticks) process_tick();
+				if (do_ticks) {
+					process_tick();
+					draw_sample_bars();
+				}
 
 			}
 
@@ -1162,7 +1278,7 @@ int main(int argc, char * argv[])
 	
 	}
 
-	for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
+	for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
 	for (uint8_t i = 0; i < mod.sample_total; i++) clear_buffer(i);
 
 	free(channels_data);
@@ -1176,10 +1292,13 @@ int main(int argc, char * argv[])
 	putch(15);
 	printf("\r\n");
 
-	if (sv->scrMode != old_mode) {
-		putch(22);
-		putch(old_mode);
-	}
+
+	// if (sv->scrMode != old_mode) {
+	// 	putch(22);
+	// 	putch(old_mode);
+	// }
+	// putch(26); //Reset viewports
+	// putch(0x0C); //CLS
 
 	return 0;
 }
