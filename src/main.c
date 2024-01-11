@@ -516,7 +516,7 @@ uint16_t clamp_period(uint16_t period) {
 }
 
 int8_t clamp_volume(int8_t volume) {
-    if (volume < 0) return 0;
+    if (volume < 1) return 1;
     else if (volume > 127) return 127;
     else return volume;
 }
@@ -600,6 +600,7 @@ void fill_empty(uint8_t rows) {
 		
 		if (sample_number > 0) {
 			
+			if (channels_data[i].latched_sample != sample_number) mod.sample_volume[channels_data[i].latched_sample] = 1;
 			channels_data[i].latched_sample = sample_number;
 			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
 			channels_data[i].current_volume = channels_data[i].latched_volume;				
