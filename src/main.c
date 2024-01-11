@@ -60,16 +60,16 @@ typedef struct {
 	bool	order_break_pending;
 	uint8_t new_order;
 	uint8_t new_row;
-	uint8_t sample_total;
+	uint8_t sample_total;	
 	bool sample_live[32];
-	uint8_t sample_volume[32];
-
+	uint8_t sample_volume[32];	
+	
 } mod_header;
 
 typedef struct {
 
 	uint16_t latched_sample;
-	uint8_t latched_volume;
+	int16_t latched_volume;
 	int16_t current_volume;
 	uint8_t current_effect;
 	uint8_t current_effect_param;
@@ -521,7 +521,26 @@ int8_t clamp_volume(int8_t volume) {
     else return volume;
 }
 
-void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
+void fill_empty(uint8_t rows) {
+			
+	for (uint8_t i = 0; i < rows; i++) {
+		putch(17);
+		putch(9);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(10);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(11);
+		printf("  --- -- -- ---");
+		putch(17);
+		putch(12);
+		printf("  --- -- -- ---");
+	}
+
+}
+
+ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
@@ -546,13 +565,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 	uint16_t hz;
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
-
-		// if (i != 0) {
-		// 	noteData += 4;
-		// 	printf("--- -- -- ---", period_to_note(period), sample_number, channels_data[i].latched_volume, effect_number, effect_param);
-		// 	if (i != mod.channels - 1) printf("  ");
-		// 	continue;
-		// }
 
 		if (verbose) {
 
@@ -587,26 +599,17 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
 		if (sample_number > 0) {
-			channels_data[i].latched_sample = sample_number;
 			
-			if (sample_number != channels_data[i].latched_sample) {
-				mod.sample_volume[channels_data[i].latched_sample] = 1;
-				//channels_data[i].latched_sample = sample_number;
-			}
-
-			channels_data[i].latched_volume = mod.header.sample[channels_data[i].latched_sample - 1].VOLUME;
-
-			if (channels_data[i].current_effect == 0x0C) channels_data[i].latched_volume = channels_data[i].current_effect_param;
-			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
+			channels_data[i].latched_sample = sample_number;
+			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
+			channels_data[i].current_volume = channels_data[i].latched_volume;				
 
 			if ((period > 0) && (effect_number != 0x03)) {	
-
-				if (swap_word((mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2) > 0) {
-					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), -1, hz);
-				}
-				else {
-					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), 0, hz);
-				}
+				
+				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+				channels_data[i].current_volume = channels_data[i].latched_volume;
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 			}
@@ -615,25 +618,13 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 			if (channels_data[i].latched_sample > 0) {
 				
-				if (channels_data[i].current_effect == 0x0C) channels_data[i].latched_volume = channels_data[i].current_effect_param;
-
-				if (swap_word((mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2) > 0) {
-					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), -1, hz);
-				} else {
-					play_sample(channels_data[i].latched_sample, i, clamp_volume(channels_data[i].latched_volume * 2), 0, hz);
-				}
+				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
+				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
+				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+				channels_data[i].current_volume = channels_data[i].latched_volume;
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
 			}
-
-		}
-
-		if (verbose) {
-
-		//Potential 8 channel layout: printf("%s %X %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
-			
-		//printf("%03u/%04u %02u %02X %X%02X", period, hz, sample_number, channels_data[i].current_volume, effect_number, effect_param);
-		//printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
 
 		}
 
@@ -668,23 +659,34 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				} break;					
 
 				case 0x0B: {//Skip to order xx
-			
-					uint8_t new_order = channels_data[i].current_effect_param;
+
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					
+					uint8_t new_order = (param_x * 16) + param_y;
 
 					if (mod.order_break_pending == false) {
 						mod.new_order = new_order;
 						mod.order_break_pending = true;
 					} 
 
-				} break;
+				} break;				
 
-				case 0x0C: {//Set volume
+				case 0x0C: {//Set channel volume to xx
 
-					channels_data[i].latched_volume = channels_data[i].current_effect_param;
-					set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 
+					uint8_t new_vol = (param_x * 16) + param_y;
 
-				} break;											
+					channels_data[i].current_volume = (new_vol * 2) - 1;
+					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+					set_volume(i, channels_data[i].current_volume);
+					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
+
+				} break;				
 
 				case 0x0D: {//Pattern break - Skip to next pattern, row xx
 
@@ -743,40 +745,21 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 			}		
 
-		}		
+		}
 
-		printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, channels_data[i].latched_volume, effect_number, effect_param);
+		printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
 
 		putch(17);
 		putch(7);
 		//if (i != mod.channels - 1) printf("|");
 		if (i != mod.channels - 1) printf("  ");
 
-	}	
+	}
 
-	//printf("\r\n");
 	draw_rect(286,18,288,230);
 	draw_rect(286 + 120,18,288 + 120,230);
 	draw_rect(286 + 240,18,288 + 240,230);
-
-}
-
-void fill_empty(uint8_t rows) {
-			
-	for (uint8_t i = 0; i < rows; i++) {
-		putch(17);
-		putch(9);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(10);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(11);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(12);
-		printf("  --- -- -- ---");
-	}
+	switch_buffers();
 
 }
 
@@ -863,16 +846,21 @@ void process_tick() {
 
 					if (slide_x) {
 
-						channels_data[i].latched_volume += slide_x;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						channels_data[i].current_volume += slide_adjusted;
+						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
 
-					} else if (slide_y) {
+					} else {
 
-						channels_data[i].latched_volume -= slide_y;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
-
+						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						channels_data[i].current_volume -= slide_adjusted;
+						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
 					}					
 
 					if (channels_data[i].target_period > channels_data[i].current_period) {
@@ -900,17 +888,22 @@ void process_tick() {
 
 					if (slide_x) {
 
-						channels_data[i].latched_volume += slide_x;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						channels_data[i].current_volume += slide_adjusted;
+						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
 
-					} else if (slide_y) {
+					} else {
 
-						channels_data[i].latched_volume -= slide_y;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
-
-					}										
+						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						channels_data[i].current_volume -= slide_adjusted;
+						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+					}						
 
 					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
   					delta *= channels_data[i].vibrato_depth;
@@ -934,8 +927,12 @@ void process_tick() {
   					delta *= channels_data[i].tremolo_depth;
 					delta >>= 6; //Divide by 64
 
-					if (channels_data[i].tremolo_position < 0) set_volume(i, clamp_volume(channels_data[i].latched_volume - delta) * 2);
-					else if (channels_data[i].tremolo_position >= 0) set_volume(i, clamp_volume(channels_data[i].latched_volume + delta) * 2);
+					if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2));
+					else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2));
+					if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+					
+					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
 		
 					//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
@@ -951,17 +948,22 @@ void process_tick() {
 					
 					if (slide_x) {
 
-						channels_data[i].latched_volume += slide_x;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_x, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
+						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						channels_data[i].current_volume += slide_adjusted;
+						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
 
-					} else if (slide_y) {
+					} else {
 
-						channels_data[i].latched_volume -= slide_y;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_y, channels_data[i].latched_volume);
-						set_volume(i, clamp_volume(channels_data[i].latched_volume) * 2);
-
-					}		
+						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						channels_data[i].current_volume -= slide_adjusted;
+						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+						set_volume(i, channels_data[i].current_volume);
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+					}
 
 				} break;
 
@@ -1015,27 +1017,27 @@ void logical_coords(bool on) {
 
 void draw_sample_bars() {
 
-	// putch(18);
-	// putch(0);
-	// putch(0); //Black
-	// draw_rect(0,30,160,240);
+	putch(18);
+	putch(0);
+	putch(0); //Black
+	draw_rect(0,30,160,240);
 	putch(18);
 	putch(0);
 	putch(15);//White
 
 	uint8_t j = 0;
-	for (uint8_t i = 0; i < mod.sample_total; i++) {
-		if (mod.sample_live[i + 1] == true) j++;
+	for (uint8_t i = 1; i <= mod.sample_total; i++) {
+		if (mod.sample_live[i] == true) j++;
 
-		putch(18);
-		putch(0);
-		putch(0); //Black
-		draw_rect(0,30 + (j * 4) + 6,2 + 127,30 + (j * 4) + 8);
+		// putch(18);
+		// putch(0);
+		// putch(0); //Black
+		// draw_rect(0,30 + (j * 4) + 6,2 + 127,30 + (j * 4) + 8);
 
 		putch(18);
 		putch(0);
 		putch(15); //White		
-		draw_rect(0,30 + (j * 4) + 6,2 + (mod.sample_volume[i + 1] / 2),30 + (j * 4) + 8);
+		draw_rect(0,30 + (j * 4) + 6,2 + (mod.sample_volume[i] / 2),30 + (j * 4) + 8);
 
 	}
 
@@ -1120,12 +1122,13 @@ int main(int argc, char * argv[])
 			mod.sample_total++;
 			mod.sample_live[i] = true;
 
-			// if (extra_verbose) printf("Uploading sample %u", i);
-			// if (extra_verbose) {
+			// if (1) {
+			// 	printf("Uploading sample %u", i);
 			// 	printf(" (%02u KB) with default volume %02X", (sample_length_swapped * 2) / 10, mod.header.sample[i - 1].VOLUME);			
-			// 	if (sample_loop_length_swapped) printf(", loop start %05u", sample_loop_start_swapped * 2);
+			// 	printf(", loop start %05u", sample_loop_start_swapped * 2);
+			// 	printf(", loop length %05u", sample_loop_length_swapped);
+			// 	printf("\r\n");
 			// }
-			// if (extra_verbose) printf("\r\n");
 
 			uint24_t remaining_data = sample_length_swapped * 2;
 			uint16_t chunk;
@@ -1153,7 +1156,7 @@ int main(int argc, char * argv[])
 
 			tuneable_sample_from_buffer(i, 8363);
 
-			if ((sample_loop_start_swapped * 2) > 0) {
+			if ((sample_loop_length_swapped * 2) > 2) {
 
 				set_sample_loop_start(i, sample_loop_start_swapped * 2);
 				set_sample_loop_length(i, sample_loop_length_swapped * 2);
@@ -1165,7 +1168,7 @@ int main(int argc, char * argv[])
 	}
 
 	free(temp_sample_buffer);
-	
+
 	verbose = true;
 	extra_verbose = false;
 
@@ -1293,12 +1296,11 @@ int main(int argc, char * argv[])
 	printf("\r\n");
 
 
-	// if (sv->scrMode != old_mode) {
-	// 	putch(22);
-	// 	putch(old_mode);
-	// }
-	// putch(26); //Reset viewports
-	// putch(0x0C); //CLS
+	if (sv->scrMode != old_mode) {
+		putch(22);
+		putch(old_mode);
+	}
+	putch(26); //Reset viewports
+	putch(0x0C); //CLS
 
-	return 0;
 }
