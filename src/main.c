@@ -63,6 +63,7 @@ typedef struct {
 	uint8_t sample_total;	
 	bool sample_live[32];
 	uint8_t sample_volume[32];	
+	uint8_t sample_channel[32];
 	
 } mod_header;
 
@@ -96,8 +97,11 @@ uint8_t sine_table[] = {
 
 #pragma pack(pop)
 
-mod_header mod;
-channel_data *channels_data = NULL;
+static mod_header mod;
+static channel_data *channels_data = NULL;
+static FILE *file;
+static uint8_t old_mode;
+static int16_t global_volume = 100;
 
 // Parameters:
 // - argc: Argument count
@@ -167,6 +171,22 @@ void timer0_end() {
 
 }
 
+int test_bit(int num, int pos) {
+    return (num & (1 << pos)) != 0;
+}
+
+void set_bit(int *num, int pos) {
+    *num |= (1 << pos);
+}
+
+void toggle_bit(int *num, int pos) {
+    *num ^= (1 << pos);
+}
+
+void clea_bit(int *num, int pos) {
+    *num &= ~(1 << pos);
+}
+
 uint16_t swap_word(uint16_t num) {
     return ((num >> 8) & 0xFF) | ((num & 0xFF) << 8);
 }
@@ -197,6 +217,16 @@ void write24bit(uint24_t w)
 	putch(w & 0xFF); // write LSB
 	putch(w >> 8);	 // write middle	
     putch(w >> 16);	 // write MSB	
+}
+
+void clear_assets() {
+
+	//VDU 23, 27, 16
+
+	putch(23);
+	putch(27);
+	putch(16);
+
 }
 
 void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {	
@@ -509,33 +539,97 @@ const char* period_to_note(uint16_t period) {
 	
 }
 
+void tidy_exit(const char* exit_message) {
+
+	for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
+	//for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
+	clear_assets();
+
+	if (channels_data != NULL) free(channels_data);
+
+	if (file != NULL) fclose(file);
+	
+	timer0_end();
+
+	//set_channel_rate(-1, 16384);
+	putch(17);
+	putch(15);
+	printf("\r\n"); 
+
+	if (sv->scrMode != old_mode) {
+		putch(22);
+		putch(old_mode);
+	}
+	putch(26); //Reset viewports
+	putch(0x0C); //CLS
+
+	if (exit_message != NULL) printf("%s\r\n", exit_message);
+
+}
+
 uint16_t clamp_period(uint16_t period) {
-    if (period < 113) return 113;
-    else if (period > 856) return 856;
+    if (period <= 113) return 113;
+    else if (period >= 856) return 856;
     else return period;
 }
 
-int8_t clamp_volume(int8_t volume) {
-    if (volume < 1) return 1;
-    else if (volume > 127) return 127;
+int16_t clamp_volume(int8_t volume) {
+    if (volume <= 0) return 0;
+    else if (volume >= 127) return 127;
     else return volume;
 }
 
 void fill_empty(uint8_t rows) {
 			
+	putch(0x1E);
+
 	for (uint8_t i = 0; i < rows; i++) {
-		putch(17);
-		putch(9);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(10);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(11);
-		printf("  --- -- -- ---");
-		putch(17);
-		putch(12);
-		printf("  --- -- -- ---");
+		if (mod.channels == 4) {
+			uint8_t c = 9;
+			putch(17);
+			putch(7);
+			printf("--");
+			putch(17);
+			putch(c++);
+			printf(" --- -- -- ---");
+			putch(17);
+			putch(c++);
+			printf(" --- -- -- ---");
+			putch(17);
+			putch(c++);
+			printf(" --- -- -- ---");
+			putch(17);
+			putch(c++);
+			printf(" --- -- -- ---");
+			printf("\r\n");
+		} else if (mod.channels == 8) {
+			uint8_t c = 9;
+			putch(17);
+			putch(c++);
+			printf("-- --- --");
+			putch(17);
+			putch(c++);
+			printf(" --- --");
+			putch(17);
+			putch(c++);
+			printf(" --- --");
+			putch(17);
+			putch(c++);
+			printf(" --- --");
+			putch(17);
+			putch(c++);
+			printf(" --- --");
+			putch(17);
+			putch(c++);
+			printf(" --- --");
+			putch(17);
+			putch(17);
+			printf(" --- --");
+			putch(17);
+			putch(18); //Manual fix for colour black
+			printf(" --- --");
+			printf("\r\n");
+		}
 	}
 
 }
@@ -550,11 +644,18 @@ void fill_empty(uint8_t rows) {
 
 	if (verbose) {
 	
-		putch(17);
-		putch(15);
-
-		//printf("\r\n%02u ", row);
-		printf("%02u", row);
+		if (row != 0) {
+			putch(17);
+			putch(15); // White row text
+			putch(17);
+			putch(128); //Black row background
+		} else {
+			putch(17);
+			putch(0); //Black row text
+			putch(17);
+			putch(7 + 128); //Grey row background
+		}
+		printf("%02u ", row);
 
 	}
 
@@ -569,7 +670,9 @@ void fill_empty(uint8_t rows) {
 		if (verbose) {
 
 			putch(17);
-			putch(9 + i);
+			uint8_t new_colour = 9+i;
+			if (new_colour == 16) new_colour++;
+			putch(new_colour);
 			
 		}
 
@@ -600,8 +703,12 @@ void fill_empty(uint8_t rows) {
 		
 		if (sample_number > 0) {
 			
-			if (channels_data[i].latched_sample != sample_number) mod.sample_volume[channels_data[i].latched_sample] = 1;
+			if (channels_data[i].latched_sample != sample_number) {
+				mod.sample_volume[channels_data[i].latched_sample] = 0;
+				mod.sample_channel[channels_data[i].latched_sample] = i;
+			}
 			channels_data[i].latched_sample = sample_number;
+			mod.sample_channel[channels_data[i].latched_sample] = i;
 			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
 			channels_data[i].current_volume = channels_data[i].latched_volume;				
 
@@ -609,7 +716,7 @@ void fill_empty(uint8_t rows) {
 				
 				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
 				channels_data[i].current_volume = channels_data[i].latched_volume;
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
@@ -621,7 +728,7 @@ void fill_empty(uint8_t rows) {
 				
 				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
 				channels_data[i].current_volume = channels_data[i].latched_volume;
 				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
 
@@ -684,7 +791,7 @@ void fill_empty(uint8_t rows) {
 					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 					set_volume(i, channels_data[i].current_volume);
-					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
 
 				} break;				
@@ -748,19 +855,49 @@ void fill_empty(uint8_t rows) {
 
 		}
 
-		printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, channels_data[i].current_volume, effect_number, effect_param);
+		if (mod.channels == 4) {
+			
+			//## FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE
+			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+			if (i != mod.channels - 1) printf(" ");
 
-		putch(17);
-		putch(7);
-		//if (i != mod.channels - 1) printf("|");
-		if (i != mod.channels - 1) printf("  ");
+		} else if (mod.channels == 6) {
+
+			//## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
+			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+			if (i != mod.channels - 1) printf(" ");			
+
+
+		} else if (mod.channels == 8) {
+			
+			//## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
+			printf("%s %02u", period_to_note(period), sample_number);
+			if (i != mod.channels - 1) printf(" ");
+			
+		}
 
 	}
 
-	draw_rect(286,18,288,230);
-	draw_rect(286 + 120,18,288 + 120,230);
-	draw_rect(286 + 240,18,288 + 240,230);
-	switch_buffers();
+	putch(17);
+	putch(128); //Black row background	
+	printf(" \r\n");
+
+	putch(18);
+	putch(0);
+	putch(7); //Grey foreground
+
+	draw_rect(178,      18,180,      230);
+
+	if (mod.channels == 4) {
+		draw_rect(290,      18,292,      230);
+		draw_rect(282 + 120,18,284 + 120,230);
+		draw_rect(274 + 240,18,276 + 240,230);
+	} else if (mod.channels == 8) {
+		for (uint8_t i = 0; i < 7; i++) {
+			uint16_t offset = 56 * i;
+			draw_rect(234 + offset, 18, 234 + offset + 2, 230);
+		}													
+	}
 
 }
 
@@ -852,7 +989,7 @@ void process_tick() {
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 					} else {
 
@@ -861,7 +998,7 @@ void process_tick() {
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 					}					
 
 					if (channels_data[i].target_period > channels_data[i].current_period) {
@@ -894,7 +1031,7 @@ void process_tick() {
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 					} else {
 
@@ -903,7 +1040,7 @@ void process_tick() {
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 					}						
 
 					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
@@ -933,7 +1070,7 @@ void process_tick() {
 					if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 					
-					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 		
 					//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
@@ -954,7 +1091,7 @@ void process_tick() {
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 					} else {
 
@@ -963,7 +1100,7 @@ void process_tick() {
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume / 2;
+						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 					}
 
 				} break;
@@ -999,7 +1136,9 @@ void header_line() {
 	putch(0); //Black foreground
 	putch(17);
 	putch(128 + 7); //Grey background
-	printf("# Frq Sa Vo Eff  Frq Sa Vo Eff  Frq Sa Vo Eff  Frq Sa Vo Eff"); //58 Chars long (22 from left)
+	if (mod.channels == 4) printf("## Frq Sa Vo Eff Frq Sa Vo Eff Frq Sa Vo Eff Frq Sa Vo Eff"); //58 Chars long (22 from left)
+	else if (mod.channels == 6) printf("## Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa");	
+	else if (mod.channels == 8) printf("## Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa Frq Sa"); //58 Chars long (22 from left)
 	putch(17);
 	putch(128 + 0); //Reset to black background
 	//printf("          \r\n");
@@ -1018,33 +1157,62 @@ void logical_coords(bool on) {
 
 void draw_sample_bars() {
 
+	switch_buffers();
+
+	uint8_t top_offset = 36 + 16;
+
 	putch(18);
 	putch(0);
 	putch(0); //Black
-	draw_rect(0,30,160,240);
+	
+	draw_rect(19,top_offset + 8,55,240); //Clear first column
+	draw_rect(89,top_offset + 8,160,240); //Clear second column
+	
+	putch(18);
+	putch(0);
+	putch(7);//Grey
+	draw_rect(25,32 + 16,154,38 + 16); //Volume back bar
 	putch(18);
 	putch(0);
 	putch(15);//White
+	draw_rect(26,33 + 16,26 + global_volume,37 + 16); //Volume front bar
 
-	uint8_t j = 0;
-	for (uint8_t i = 1; i <= mod.sample_total; i++) {
+	for (uint8_t i = 1, j = 0; i <= mod.sample_total; i += 2) {
+
 		if (mod.sample_live[i] == true) j++;
+		else continue;
 
-		// putch(18);
-		// putch(0);
-		// putch(0); //Black
-		// draw_rect(0,30 + (j * 4) + 6,2 + 127,30 + (j * 4) + 8);
+		//First column
+		if (mod.sample_volume[i] > 0) {
+			putch(18);
+			putch(0);
+			putch(9 + mod.sample_channel[i]);		
+			draw_rect(	20,										//X1
+						top_offset + (j * 8) + 6,				//Y1
+						20 + (mod.sample_volume[i] / 4),		//X1
+						top_offset + (j * 8) + 8);				//Y2
+		}
 
-		putch(18);
-		putch(0);
-		putch(15); //White		
-		draw_rect(0,30 + (j * 4) + 6,2 + (mod.sample_volume[i] / 2),30 + (j * 4) + 8);
+		if (mod.sample_live[i + 1] != true) continue;
+
+		if (mod.sample_volume[i + 1] > 0) {
+			putch(18);
+			putch(0);
+			putch(9 + mod.sample_channel[i + 1]);
+			//Second column
+			draw_rect(	92,										//X1
+						top_offset + (j * 8) + 6,				//Y1
+						92 + (mod.sample_volume[i + 1] / 4),	//X1
+						top_offset + (j * 8) + 8);				//Y2
+		}
 
 	}
 
-}
+	putch(18);
+	putch(0);
+	putch(15); //Return graphics colour to white.
 
-uint8_t old_mode;
+}
 
 int main(int argc, char * argv[])
 {
@@ -1053,10 +1221,10 @@ int main(int argc, char * argv[])
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
 
-	FILE *file = fopen(argv[1], "rb");
+	file = fopen(argv[1], "rb");
     if (file == NULL) {
-        printf("Could not open file.\r\n");
-        return 0;
+        tidy_exit("Could not open file.");
+		return 0;
     }
 
 	old_mode = sv->scrMode;
@@ -1066,14 +1234,17 @@ int main(int argc, char * argv[])
 		putch(4);
 	}
 
+	set_volume(255, global_volume);
 	//set_channel_rate(-1, 16384);
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) mod.channels = 4; //Classic 4 channels
+	//else if (strncmp(mod.header.sig, "6CHN", 4) == 0) mod.channels = 6; //8 channels
+	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) mod.channels = 8; //8 channels
 	else {
 
-		printf("Unknown .mod format, only classic 4 channel .MODs are supported.\r\n");
+		tidy_exit("Unknown .mod format, only 4 or 8 channel .MODs are supported.");
 		return 0;
 
 	}
@@ -1095,7 +1266,7 @@ int main(int argc, char * argv[])
 	mod.pattern_break_pending = false;
 	mod.order_break_pending = false;
 
-	for (uint8_t i = 1; i < 31; i++) mod.sample_volume[i] = 1;
+	for (uint8_t i = 1; i < 31; i++) mod.sample_volume[i] = 0;
 
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
 
@@ -1137,7 +1308,7 @@ int main(int argc, char * argv[])
 			clear_buffer(i);
 			temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
 			if (temp_sample_buffer == NULL) {
-				printf("\r\nMemory allocation failed (%u KB).\r\n", CHUNK_SIZE);
+				tidy_exit("Local sample memory allocation failed");
 				return 0;	
 			}
 
@@ -1168,6 +1339,8 @@ int main(int argc, char * argv[])
 
 	}
 
+	mod.sample_live[0] = false; //No sample #0
+
 	free(temp_sample_buffer);
 
 	verbose = true;
@@ -1188,7 +1361,10 @@ int main(int argc, char * argv[])
 	
 	set_text_window(0,29,22,1);
 
-	printf("Title:\r\n%s\r\n", mod.header.name);
+	printf("Agon_MOD\r\n\r\n");
+	printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
+
+	for (uint8_t i = 1; i <= mod.sample_total; i += 2) if (mod.sample_live[i] == true) printf("%02u       %02u\r\n", i, i + 1);
 
 	logical_coords(false);
 	//draw_rect(10,20,30,40);
@@ -1217,6 +1393,16 @@ int main(int argc, char * argv[])
 			if (sv->vkeycount != old_key_count) {
 
 				if (sv->keyascii == 27) break;
+				else if (sv->keyascii == '+') {
+					global_volume += 5;
+					if (global_volume > 127) global_volume = 127;
+					set_volume(255, global_volume);
+				}
+				else if (sv->keyascii == '-') {
+					global_volume -= 5;
+					if (global_volume < 0) global_volume = 0;
+					set_volume(255, global_volume);
+				}
 
 				old_key_count = sv->vkeycount;
 
@@ -1282,26 +1468,7 @@ int main(int argc, char * argv[])
 	
 	}
 
-	for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
-	for (uint8_t i = 0; i < mod.sample_total; i++) clear_buffer(i);
-
-	free(channels_data);
-
-	fclose(file);
-	
-	timer0_end();
-
-	//set_channel_rate(-1, 16384);
-	putch(17);
-	putch(15);
-	printf("\r\n");
-
-
-	if (sv->scrMode != old_mode) {
-		putch(22);
-		putch(old_mode);
-	}
-	putch(26); //Reset viewports
-	putch(0x0C); //CLS
+	tidy_exit(NULL);
+	return 0;
 
 }
