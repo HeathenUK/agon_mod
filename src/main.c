@@ -744,7 +744,7 @@ void fill_empty(uint8_t rows) {
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
-		if (sample_number > 0 && (effect_number != 0x03)) {
+		if (sample_number > 0 && (effect_number != 0x03) && (effect_number != 0x05)) {
 			
 			if (channels_data[i].latched_sample != sample_number) {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
@@ -768,7 +768,7 @@ void fill_empty(uint8_t rows) {
 
 			}
 
-		} else if ((period > 0) && (effect_number != 0x03)) {
+		} else if ((period > 0) && (effect_number != 0x03) && (effect_number != 0x05)) {
 
 			if (channels_data[i].latched_sample > 0) {
 
@@ -1019,6 +1019,42 @@ void pitch_slide_directional(uint8_t i) {
 
 }
 
+void do_vibrato(uint8_t i) {
+
+	uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
+	delta *= channels_data[i].vibrato_depth;
+	delta >>= 7; //Divide by 128
+
+	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
+	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
+
+	if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
+
+	channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
+	if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
+
+}
+
+void do_tremulo(uint8_t i) {
+
+	uint16_t delta = sine_table[channels_data[i].tremolo_position & 31];
+	delta *= channels_data[i].tremolo_depth;
+	delta >>= 6; //Divide by 64
+
+	if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2) - 1);
+	else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2) - 1);
+	if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+	
+	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+
+	//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
+
+	channels_data[i].tremolo_position += channels_data[i].tremolo_speed;
+	if (channels_data[i].tremolo_position > 31) channels_data[i].tremolo_position -= 64;
+
+}
+
 void process_tick() {
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
@@ -1047,19 +1083,7 @@ void process_tick() {
 
 				case 0x04: {//Vibrato
 					
-					uint16_t delta = sine_table[abs(channels_data[i].vibrato_position)];
-  					delta *= channels_data[i].vibrato_depth;
-					delta >>= 7; //Divide by 128
-
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period + delta));					
-		
-					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
-
-					channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
-					if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
+					do_vibrato(i);
 
 				} break;
 
@@ -1075,39 +1099,13 @@ void process_tick() {
 
 					volume_slide(i, channels_data[i].current_effect_param);					
 
-					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
-  					delta *= channels_data[i].vibrato_depth;
-					delta >>= 7; //Divide by 128
-
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period + delta));
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
-		
-					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
-
-					channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
-					if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
+					do_vibrato(i);
 
 				} break;	
 
 				case 0x07: {//Tremolo
 					
-					uint16_t delta = sine_table[channels_data[i].tremolo_position & 31];
-  					delta *= channels_data[i].tremolo_depth;
-					delta >>= 6; //Divide by 64
-
-					if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2) - 1);
-					else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2) - 1);
-					if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-					
-					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-		
-					//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
-
-					channels_data[i].tremolo_position += channels_data[i].tremolo_speed;
-					if (channels_data[i].tremolo_position > 31) channels_data[i].tremolo_position -= 64;
+					do_tremulo(i);
 
 				} break;				
 
