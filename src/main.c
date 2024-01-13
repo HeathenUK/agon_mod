@@ -22,6 +22,9 @@ volatile void *timer0_prevhandler;
 volatile uint24_t ticker = 0;
 extern void timer_handler();
 
+//#define PD_HZ 187815
+#define PD_HZ 210000
+
 #pragma pack(push, 1)
 
 typedef struct {
@@ -64,6 +67,7 @@ typedef struct {
 	bool sample_live[32];
 	uint8_t sample_volume[32];	
 	uint8_t sample_channel[32];
+	bool bad_samples;
 	
 } mod_header;
 
@@ -541,7 +545,7 @@ const char* period_to_note(uint16_t period) {
 
 void tidy_exit(const char* exit_message) {
 
-	for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
+	if (mod.channels) for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
 	//for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
 	clear_assets();
 
@@ -563,6 +567,28 @@ void tidy_exit(const char* exit_message) {
 	}
 	putch(26); //Reset viewports
 	putch(0x0C); //CLS
+
+	if (exit_message != NULL) printf("%s\r\n", exit_message);
+
+}
+
+void untidy_exit(const char* exit_message) {
+
+	if (mod.channels) for (uint8_t i = 0; i <= mod.channels; i++) reset_channel(i);
+	//for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
+	clear_assets();
+
+	if (channels_data != NULL) free(channels_data);
+
+	if (file != NULL) fclose(file);
+	
+	timer0_end();
+
+	//set_channel_rate(-1, 16384);
+
+	putch(17);
+	putch(15);
+	printf("\r\n"); 
 
 	if (exit_message != NULL) printf("%s\r\n", exit_message);
 
@@ -691,8 +717,8 @@ void fill_empty(uint8_t rows) {
 
 		if (effect_number == 0x09 && effect_param > 0) channels_data[i].latched_offset = effect_param * 256;
 
-		hz = channels_data[i].current_period > 0 ? 187815 / clamp_period(channels_data[i].current_period) : 0;
-		//hz = channels_data[i].current_period > 0 ? 187815 / channels_data[i].current_period : 0;
+		hz = channels_data[i].current_period > 0 ? PD_HZ / clamp_period(channels_data[i].current_period) : 0;
+		//hz = channels_data[i].current_period > 0 ? PD_HZ / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
@@ -919,8 +945,8 @@ void process_tick() {
 
 					channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].current_effect_param);
 					//channels_data[i].current_period -= slide;
-					set_frequency(i, 187815 / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
+					set_frequency(i, PD_HZ / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, PD_HZ / channels_data[i].current_period);
 
 				} break;
 
@@ -933,8 +959,8 @@ void process_tick() {
 
 					channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].current_effect_param);
 					//channels_data[i].current_period += slide;
-					set_frequency(i, 187815 / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
+					set_frequency(i, PD_HZ / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, PD_HZ / channels_data[i].current_period);
 
 				} break;
 
@@ -946,17 +972,17 @@ void process_tick() {
 
 						channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].slide_rate);
 						//channels_data[i].current_period += channels_data[i].slide_rate;
-						set_frequency(i, 187815 / channels_data[i].current_period);
+						set_frequency(i, PD_HZ / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
 						channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].slide_rate);
 						//channels_data[i].current_period -= channels_data[i].slide_rate;
-						set_frequency(i, 187815 / channels_data[i].current_period);
+						set_frequency(i, PD_HZ / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					} else set_frequency(i, 187815 / channels_data[i].current_period);
+					} else set_frequency(i, PD_HZ / channels_data[i].current_period);
 
 				} break;				
 
@@ -966,10 +992,10 @@ void process_tick() {
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, 187815 / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, 187815 / clamp_period(channels_data[i].current_period + delta));
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, 187815 / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, 187815 / (channels_data[i].current_period + delta));					
+					if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period - delta));
+					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period + delta));
+					// if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / (channels_data[i].current_period - delta));
+					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / (channels_data[i].current_period + delta));					
 		
 					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -1006,17 +1032,17 @@ void process_tick() {
 
 						//channels_data[i].current_period += channels_data[i].slide_rate;
 						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate + channels_data[i].current_period);
-						set_frequency(i, 187815 / channels_data[i].current_period);
+						set_frequency(i, PD_HZ / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
 						//channels_data[i].current_period -= channels_data[i].slide_rate;
 						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate - channels_data[i].current_period);
-						set_frequency(i, 187815 / channels_data[i].current_period);
+						set_frequency(i, PD_HZ / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					} else set_frequency(i, 187815 / channels_data[i].current_period);
+					} else set_frequency(i, PD_HZ / channels_data[i].current_period);
 
 				} break;	
 
@@ -1048,10 +1074,10 @@ void process_tick() {
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, 187815 / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, 187815 / (channels_data[i].current_period + delta));
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, 187815 / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, 187815 / clamp_period(channels_data[i].current_period + delta));					
+					// if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / (channels_data[i].current_period - delta));
+					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / (channels_data[i].current_period + delta));
+					if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period - delta));
+					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period + delta));					
 		
 					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -1166,8 +1192,8 @@ void draw_sample_bars() {
 	putch(0);
 	putch(0); //Black
 	
-	draw_rect(19,top_offset + 8,55,240); //Clear first column
-	draw_rect(89,top_offset + 8,160,240); //Clear second column
+	draw_rect(19,top_offset + 8,55,200); //Clear first column
+	draw_rect(89,top_offset + 8,160,200); //Clear second column
 	
 	putch(18);
 	putch(0);
@@ -1227,7 +1253,7 @@ int main(int argc, char * argv[])
 
 	file = fopen(argv[1], "rb");
     if (file == NULL) {
-        tidy_exit("Could not open file.");
+        untidy_exit("Could not open file.");
 		return 0;
     }
 
@@ -1247,11 +1273,12 @@ int main(int argc, char * argv[])
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) mod.channels = 4; //Classic 4 channels
+	else if (strncmp(mod.header.sig, "FLT4", 4) == 0) mod.channels = 4; //Startrekker 4 channels
 	//else if (strncmp(mod.header.sig, "6CHN", 4) == 0) mod.channels = 6; //8 channels
 	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) mod.channels = 8; //8 channels
 	else {
 
-		tidy_exit("Unknown .mod format, only 4 or 8 channel .MODs are supported.");
+		untidy_exit("Unknown .mod format, only 4 or 8 channel .MODs are supported.");
 		return 0;
 
 	}
@@ -1303,35 +1330,53 @@ int main(int argc, char * argv[])
 
 			// if (1) {
 			// 	printf("Uploading sample %u", i);
-			// 	printf(" (%02u KB) with default volume %02X", (sample_length_swapped * 2) / 10, mod.header.sample[i - 1].VOLUME);			
+			// 	printf(" %02u bytes, def. vol %02X", (sample_length_swapped * 2), mod.header.sample[i - 1].VOLUME);			
 			// 	printf(", loop start %05u", sample_loop_start_swapped * 2);
-			// 	printf(", loop length %05u", sample_loop_length_swapped);
+			// 	printf(", loop length %05u", sample_loop_length_swapped * 2);
 			// 	printf("\r\n");
+			// 	untidy_exit(NULL);
+			//	return 0;
 			// }
 
-			uint24_t remaining_data = sample_length_swapped * 2;
-			uint16_t chunk;
+			if ((sample_length_swapped * 2) < 300) mod.bad_samples = true;
 
-			clear_buffer(i);
-			temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
-			if (temp_sample_buffer == NULL) {
-				tidy_exit("Local sample memory allocation failed");
-				return 0;	
-			}
+			if ((sample_length_swapped * 2) <= CHUNK_SIZE) {
 
-			while (remaining_data > 0) {
+				clear_buffer(i);
+				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (sample_length_swapped * 2));
+				if (temp_sample_buffer == NULL) {
+					untidy_exit("Local sample memory allocation failed");
+					return 0;	
+				}
+				fread(temp_sample_buffer, sizeof(uint8_t), (sample_length_swapped * 2), file);
+				add_stream_to_buffer(i, (char *)temp_sample_buffer, (sample_length_swapped * 2));		
+
+			} else {
+
+				uint24_t remaining_data = sample_length_swapped * 2;
+				uint16_t chunk;
+
+				clear_buffer(i);
+				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
+				if (temp_sample_buffer == NULL) {
+					untidy_exit("Local sample memory allocation failed");
+					return 0;	
+				}
+
+				while (remaining_data > 0) {
+					
+					if (remaining_data > CHUNK_SIZE) {
+						chunk = CHUNK_SIZE;
+					} else chunk = remaining_data;
+					
+					fread(temp_sample_buffer, sizeof(uint8_t), chunk, file);
+					
+					add_stream_to_buffer(i, (char *)temp_sample_buffer, chunk);
+					
+					remaining_data -= chunk;
 				
-				if (remaining_data > CHUNK_SIZE) {
-					chunk = CHUNK_SIZE;
-				} else chunk = remaining_data;
-				
-				fread(temp_sample_buffer, sizeof(uint8_t), chunk, file);
-				
-				add_stream_to_buffer(i, (char *)temp_sample_buffer, chunk);
-				
-				remaining_data -= chunk;
-			
-			}
+				}
+		}
 
 			tuneable_sample_from_buffer(i, 8363);
 
@@ -1370,8 +1415,6 @@ int main(int argc, char * argv[])
 
 	printf("Agon_MOD\r\n\r\n");
 	printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
-
-	//for (uint8_t i = 1; i <= mod.sample_total; i += 2) if (mod.sample_live[i] == true) printf("%02u       %02u\r\n", i, i + 1);
  
 	for (uint8_t i = 1; i < 32;) {
 
@@ -1389,6 +1432,10 @@ int main(int argc, char * argv[])
 
 		} else break;
 
+	}
+
+	if (mod.bad_samples) {
+		printf("\r\n\r\nNOTE: Tiny samples\r\ndetected. These may\r\nnot play well (yet)");
 	}
 
 	logical_coords(false);
