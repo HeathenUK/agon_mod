@@ -552,6 +552,7 @@ void tidy_exit(const char* exit_message) {
 	timer0_end();
 
 	//set_channel_rate(-1, 16384);
+
 	putch(17);
 	putch(15);
 	printf("\r\n"); 
@@ -683,7 +684,7 @@ void fill_empty(uint8_t rows) {
 
 		if (effect_number == 0x03 && effect_param > 0) { //Log the note as the effect's target, but don't use it now.
 			channels_data[i].slide_rate = effect_param; //If the effect has a parameter, use it as slide rate.
-			channels_data[i].target_period = period;
+			if (period) channels_data[i].target_period = period;
 		} else if (period > 0) {
 			channels_data[i].current_period = period;
 		}
@@ -911,12 +912,12 @@ void process_tick() {
 
 				case 0x01: { //Pitch slide (porta) up
 
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					// uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					// uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 
-					uint8_t slide = (param_x * 16) + param_y;
+					//uint8_t slide = (param_x * 16) + param_y;
 
-					channels_data[i].current_period = clamp_period(channels_data[i].current_period - slide);
+					channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].current_effect_param);
 					//channels_data[i].current_period -= slide;
 					set_frequency(i, 187815 / channels_data[i].current_period);
 					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
@@ -925,12 +926,12 @@ void process_tick() {
 
 				case 0x02: { //Pitch slide (porta) down
 
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+					// uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					// uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 
-					uint8_t slide = (param_x * 16) + param_y;			
+					// uint8_t slide = (param_x * 16) + param_y;			
 
-					channels_data[i].current_period = clamp_period(channels_data[i].current_period + slide);
+					channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].current_effect_param);
 					//channels_data[i].current_period += slide;
 					set_frequency(i, 187815 / channels_data[i].current_period);
 					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, 187815 / channels_data[i].current_period);
@@ -955,7 +956,7 @@ void process_tick() {
 						set_frequency(i, 187815 / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					}
+					} else set_frequency(i, 187815 / channels_data[i].current_period);
 
 				} break;				
 
@@ -984,7 +985,7 @@ void process_tick() {
 
 					if (slide_x) {
 
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						uint8_t slide_adjusted = (slide_x * 2);
 						channels_data[i].current_volume += slide_adjusted;
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
@@ -993,7 +994,7 @@ void process_tick() {
 
 					} else {
 
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						uint8_t slide_adjusted = (slide_y * 2);
 						channels_data[i].current_volume -= slide_adjusted;
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
@@ -1015,7 +1016,7 @@ void process_tick() {
 						set_frequency(i, 187815 / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					}					
+					} else set_frequency(i, 187815 / channels_data[i].current_period);
 
 				} break;	
 
@@ -1086,16 +1087,16 @@ void process_tick() {
 					
 					if (slide_x) {
 
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
+						uint8_t slide_adjusted = (slide_x * 2);
 						channels_data[i].current_volume += slide_adjusted;
 						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 						set_volume(i, channels_data[i].current_volume);
 						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
-					} else {
+					} else if (slide_y) {
 
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
+						uint8_t slide_adjusted = (slide_y * 2);
 						channels_data[i].current_volume -= slide_adjusted;
 						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
@@ -1177,34 +1178,37 @@ void draw_sample_bars() {
 	putch(15);//White
 	draw_rect(26,33 + 16,26 + global_volume,37 + 16); //Volume front bar
 
-	for (uint8_t i = 1, j = 0; i <= mod.sample_total; i += 2) {
+	for (uint8_t i = 1, j = 0; i < 32;) {
 
-		if (mod.sample_live[i] == true) j++;
-		else continue;
-
-		//First column
-		if (mod.sample_volume[i] > 0) {
-			putch(18);
-			putch(0);
-			putch(9 + mod.sample_channel[i]);		
-			draw_rect(	20,										//X1
-						top_offset + (j * 8) + 6,				//Y1
-						20 + (mod.sample_volume[i] / 4),		//X1
-						top_offset + (j * 8) + 8);				//Y2
+		while (i < 32 && !mod.sample_live[i]) {
+			i++;
 		}
 
-		if (mod.sample_live[i + 1] != true) continue;
+		if (i < 32) {
+			j++;
 
-		if (mod.sample_volume[i + 1] > 0) {
-			putch(18);
-			putch(0);
-			putch(9 + mod.sample_channel[i + 1]);
-			//Second column
-			draw_rect(	92,										//X1
-						top_offset + (j * 8) + 6,				//Y1
-						92 + (mod.sample_volume[i + 1] / 4),	//X1
-						top_offset + (j * 8) + 8);				//Y2
-		}
+			if (mod.sample_volume[i] > 0) {
+				putch(18);
+				putch(0);
+				putch(9 + mod.sample_channel[i]);
+				draw_rect(20, top_offset + (j * 8) + 6, 20 + (mod.sample_volume[i] / 4), top_offset + (j * 8) + 8);
+			}
+
+			i++;
+
+			while (i < 32 && !mod.sample_live[i]) {
+				i++;
+			}
+
+			if (i < 32 && mod.sample_volume[i] > 0) {
+				putch(18);
+				putch(0);
+				putch(9 + mod.sample_channel[i]);
+				draw_rect(92, top_offset + (j * 8) + 6, 92 + (mod.sample_volume[i] / 4), top_offset + (j * 8) + 8);
+			}
+
+			i++;
+		} else break;
 
 	}
 
@@ -1235,7 +1239,10 @@ int main(int argc, char * argv[])
 	}
 
 	set_volume(255, global_volume);
+	//set_channel_rate(-1, 32768);
 	//set_channel_rate(-1, 16384);
+	//set_channel_rate(-1, 8363);
+
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
@@ -1328,7 +1335,7 @@ int main(int argc, char * argv[])
 
 			tuneable_sample_from_buffer(i, 8363);
 
-			if ((sample_loop_length_swapped * 2) > 2) {
+			if (sample_loop_length_swapped > 1) {
 
 				set_sample_loop_start(i, sample_loop_start_swapped * 2);
 				set_sample_loop_length(i, sample_loop_length_swapped * 2);
@@ -1364,7 +1371,25 @@ int main(int argc, char * argv[])
 	printf("Agon_MOD\r\n\r\n");
 	printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
 
-	for (uint8_t i = 1; i <= mod.sample_total; i += 2) if (mod.sample_live[i] == true) printf("%02u       %02u\r\n", i, i + 1);
+	//for (uint8_t i = 1; i <= mod.sample_total; i += 2) if (mod.sample_live[i] == true) printf("%02u       %02u\r\n", i, i + 1);
+ 
+	for (uint8_t i = 1; i < 32;) {
+
+		while (i < 32 && !mod.sample_live[i]) i++;
+
+		if (i < 32) {
+
+			if (mod.sample_live[i]) printf("%02u       ", i);
+			i++;
+
+			while (i < 32 && !mod.sample_live[i]) i++;
+
+			if (mod.sample_live[i]) printf("%02u\r\n", i);
+			i++;
+
+		} else break;
+
+	}
 
 	logical_coords(false);
 	//draw_rect(10,20,30,40);
