@@ -7,7 +7,9 @@
 #include <string.h>
 #include <mos_api.h>
 
-#define CHUNK_SIZE 1024 //Sample upload chunk size in bytes
+#define CHUNK_SIZE 1024		//Sample upload chunk size in bytes
+#define PD_HZ 187815		//Magic number used to convert amiga periods to Agon frequencies (default 187815)
+#define TIMER_NO 5			//Timer block to use in ez80
 
 //ez80 defines
 
@@ -16,13 +18,17 @@
 #define TMR0_RR_L		0x81
 #define TMR0_DR_H		0x82
 #define TMR0_RR_H		0x82
+
 #define PRT0_IVECT		0x0A
 
-volatile void *timer0_prevhandler;
+volatile void *timer_prevhandler;
 volatile uint24_t ticker = 0;
-extern void timer_handler();
-
-#define PD_HZ 187815
+extern void timer_handler_0();
+extern void timer_handler_1();
+extern void timer_handler_2();
+extern void timer_handler_3();
+extern void timer_handler_4();
+extern void timer_handler_5();
 
 #pragma pack(push, 1)
 
@@ -47,6 +53,9 @@ typedef struct {
 	char sig[4];
 
 } mod_file_header;
+
+static const uint16_t rr_array[] = {22500, 21818, 21176, 20571, 20000, 19459, 18947, 18461, 18000, 17560, 17142, 16744, 65454, 64000, 62608, 61276, 60000, 58775, 57600, 56470, 55384, 54339, 53333, 52363, 51428, 50526, 49655, 48813, 48000, 47213, 46451, 45714, 45000, 44307, 43636, 42985, 42352, 41739, 41142, 40563, 40000, 39452, 38918, 38400, 37894, 37402, 36923, 36455, 36000, 35555, 35121, 34698, 34285, 33882, 33488, 33103, 32727, 32359, 32000, 31648, 31304, 30967, 30638, 30315, 30000, 29690, 29387, 29090, 28800, 28514, 28235, 27961, 27692, 27428, 27169, 26915, 26666, 26422, 26181, 25945, 25714, 25486, 25263, 25043, 24827, 24615, 24406, 24201, 24000, 23801, 23606, 23414, 23225, 23040, 22857, 22677, 22500, 22325, 22153, 21984, 21818, 21654, 21492, 21333, 21176, 21021, 20869, 20719, 20571, 20425, 20281, 20139, 20000, 19862, 19726, 19591, 19459, 19328, 19200, 19072, 18947, 18823, 18701, 18580, 18461, 18343, 18227, 18113, 18000, 17888, 17777, 17668, 17560, 17454, 17349, 17245, 17142, 17041, 16941, 16842, 16744, 16647, 16551, 16457, 65454, 65084, 64719, 64357, 64000, 63646, 63296, 62950, 62608, 62270, 61935, 61604, 61276, 60952, 60631, 60314, 60000, 59689, 59381, 59076, 58775, 58477, 58181, 57889, 57600, 57313, 57029, 56748, 56470, 56195, 55922, 55652, 55384, 55119, 54857, 54597, 54339, 54084, 53831, 53581, 53333, 53087, 52844, 52602, 52363, 52126, 51891, 51659, 51428, 51200, 50973, 50748, 50526, 50305, 50086, 49870, 49655, 49442, 49230, 49021, 48813, 48607, 48403, 48200, 48000, 47800, 47603, 47407, 47213, 47020, 46829, 46639, 46451, 46265, 46080, 45896, 45714, 45533, 45354, 45176};
+static const uint8_t div_array[] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
 
 typedef struct {
 
@@ -113,6 +122,7 @@ static int16_t global_volume = 100;
 //
 
 static volatile SYSVAR *sv;
+volatile uint8_t global_timer_ctl_no = 0x80; //default Timer 0
 
 unsigned char get_port(uint8_t port) {
     unsigned char output;
@@ -140,14 +150,21 @@ void set_port(uint8_t port, uint8_t value) {
     );
 }
 
-void timer0_begin(uint16_t reload_value, uint16_t clk_divider) {
+void timer_begin(uint8_t timer_no, uint16_t reload_value, uint16_t clk_divider) {
 
-	//timer0_period (in SECONDS) = (reload_value * clk_divider) / system_clock_frequency (which is 18432000 Hz)
+	//timer period (in SECONDS) = (reload_value * clk_divider) / system_clock_frequency (which is 18432000 Hz)
+	//clk_divider can be 4, 16, 64 or 256
     
 	unsigned char clkbits = 0;
     unsigned char ctl;
 
-    timer0_prevhandler = mos_setintvector(PRT0_IVECT, timer_handler);
+    
+	if (timer_no == 0) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_0);
+	else if (timer_no == 1) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_1);
+	else if (timer_no == 2) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_2);
+	else if (timer_no == 3) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_3);
+	else if (timer_no == 4) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_4);
+	else if (timer_no == 5) timer_prevhandler = mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_handler_5);
 
     switch (clk_divider) {
         case 4:   clkbits = 0x00; break;
@@ -157,20 +174,20 @@ void timer0_begin(uint16_t reload_value, uint16_t clk_divider) {
     }
     ctl = 0x53 | clkbits; // Continuous mode, reload and restart enabled, and enable the timer    
 
-    set_port(TMR0_CTL, 0x00); // Disable the timer and clear all settings
+    set_port(TMR0_CTL + (timer_no * 3), 0x00); // Disable the timer and clear all settings
 	ticker = 0;
-    set_port(TMR0_RR_L, (unsigned char)(reload_value));
-    set_port(TMR0_RR_H, (unsigned char)(reload_value >> 8));
-    set_port(TMR0_CTL, ctl);
+    set_port(TMR0_RR_L + (timer_no * 3), (unsigned char)(reload_value));
+    set_port(TMR0_RR_H + (timer_no * 3), (unsigned char)(reload_value >> 8));
+    set_port(TMR0_CTL + (timer_no * 3), ctl);
 
 }
 
-void timer0_end() {
+void timer_end(uint8_t timer_no) {
 	
-	set_port(TMR0_CTL, 0x00);
-	set_port(TMR0_RR_L, 0x00);
-	set_port(TMR0_RR_H, 0x00);
-	mos_setintvector(PRT0_IVECT, timer0_prevhandler);
+	set_port(TMR0_CTL + (timer_no * 3), 0x00);
+	set_port(TMR0_RR_L + (timer_no * 3), 0x00);
+	set_port(TMR0_RR_H + (timer_no * 3), 0x00);
+	mos_setintvector(PRT0_IVECT + (timer_no * 2), timer_prevhandler);
 	ticker = 0;
 
 }
@@ -553,7 +570,7 @@ void tidy_exit(const char* exit_message) {
 
 	if (file != NULL) fclose(file);
 	
-	timer0_end();
+	timer_end(TIMER_NO);
 
 	//set_channel_rate(-1, 16384);
 
@@ -582,7 +599,7 @@ void untidy_exit(const char* exit_message) {
 
 	if (file != NULL) fclose(file);
 	
-	timer0_end();
+	timer_end(TIMER_NO);
 
 	//set_channel_rate(-1, 16384);
 
@@ -676,13 +693,14 @@ void fill_empty(uint8_t rows) {
 			putch(15); // White row text
 			putch(17);
 			putch(128); //Black row background
+			printf("%02u ", row);
 		} else {
 			putch(17);
 			putch(0); //Black row text
 			putch(17);
 			putch(7 + 128); //Grey row background
+			printf("%02X ", mod.current_order);
 		}
-		printf("%02u ", row);
 
 	}
 
@@ -715,8 +733,6 @@ void fill_empty(uint8_t rows) {
 			channels_data[i].current_period = period;
 		}
 
-		if (effect_number == 0x09 && effect_param > 0) channels_data[i].latched_offset = effect_param * 256;
-
 		hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
 		//hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
@@ -728,7 +744,7 @@ void fill_empty(uint8_t rows) {
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
-		if (sample_number > 0) {
+		if (sample_number > 0 && (effect_number != 0x03)) {
 			
 			if (channels_data[i].latched_sample != sample_number) {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
@@ -737,9 +753,12 @@ void fill_empty(uint8_t rows) {
 			channels_data[i].latched_sample = sample_number;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
 			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
-			channels_data[i].current_volume = channels_data[i].latched_volume;				
+			channels_data[i].current_volume = channels_data[i].latched_volume;
+			set_volume(i, channels_data[i].current_volume);
 
-			if ((period > 0) && (effect_number != 0x03)) {	
+			if (period > 0) {
+
+				if (effect_number == 0x09) channels_data[i].latched_offset = effect_param << 8;
 				
 				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
@@ -752,6 +771,8 @@ void fill_empty(uint8_t rows) {
 		} else if ((period > 0) && (effect_number != 0x03)) {
 
 			if (channels_data[i].latched_sample > 0) {
+
+				if (effect_number == 0x09) channels_data[i].latched_offset = effect_param << 8;
 				
 				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
 				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
@@ -873,6 +894,14 @@ void fill_empty(uint8_t rows) {
 
 					}
 
+					else if (channels_data[i].current_effect_param >= 0x20) { //<0x20 means bpm/tempo (i.e. ticker period)
+
+						mod.current_bpm = channels_data[i].current_effect_param;
+						timer_end(TIMER_NO);
+						timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
+
+					}
+
 				} break;				
 
 				default:
@@ -885,13 +914,13 @@ void fill_empty(uint8_t rows) {
 		if (mod.channels == 4) {
 			
 			//## FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE
-			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2), effect_number, effect_param);
 			if (i != mod.channels - 1) printf(" ");
 
 		} else if (mod.channels == 6) {
 
 			//## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
-			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+			printf("%s %02u %02X %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2), effect_number, effect_param);
 			if (i != mod.channels - 1) printf(" ");			
 
 
@@ -928,6 +957,68 @@ void fill_empty(uint8_t rows) {
 
 }
 
+void volume_slide(uint8_t i, uint8_t effect_param) {
+
+	uint8_t slide_x = effect_param >> 4;
+	uint8_t slide_y = effect_param & 0x0F;
+
+	if (slide_x) {
+
+		uint8_t slide_adjusted = (slide_x * 2) - 1;
+		channels_data[i].current_volume += slide_adjusted;
+		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+		if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+		set_volume(i, channels_data[i].current_volume);
+		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+
+	} else if (slide_y) {
+
+		uint8_t slide_adjusted = (slide_y * 2) - 1;
+		channels_data[i].current_volume -= slide_adjusted;
+		if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+		if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+		set_volume(i, channels_data[i].current_volume);
+		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+	}		
+
+}
+
+void pitch_slide_down(uint8_t i, uint8_t effect_param) {
+
+	channels_data[i].current_period = clamp_period(channels_data[i].current_period + effect_param);
+	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+
+}
+
+void pitch_slide_up(uint8_t i, uint8_t effect_param) {
+
+	channels_data[i].current_period = clamp_period(channels_data[i].current_period - effect_param);
+	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+
+}
+
+void pitch_slide_directional(uint8_t i) {
+
+	if (channels_data[i].target_period > channels_data[i].current_period) {
+
+		channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
+		if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
+		set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+		if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
+
+	} else if (channels_data[i].target_period < channels_data[i].current_period) {
+
+		channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
+		if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
+		set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+		if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
+
+	} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+
+}
+
 void process_tick() {
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
@@ -938,51 +1029,19 @@ void process_tick() {
 
 				case 0x01: { //Pitch slide (porta) up
 
-					// uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					// uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
-
-					//uint8_t slide = (param_x * 16) + param_y;
-
-					channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].current_effect_param);
-					//channels_data[i].current_period -= slide;
-					set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+					pitch_slide_up(i, channels_data[i].current_effect_param);
 
 				} break;
 
-				case 0x02: { //Pitch slide (porta) down
-
-					// uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					// uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
-
-					// uint8_t slide = (param_x * 16) + param_y;			
-
-					channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].current_effect_param);
-					//channels_data[i].current_period += slide;
-					set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+				case 0x02: { //Pitch slide (porta) down	
+					
+					pitch_slide_down(i, channels_data[i].current_effect_param);
 
 				} break;
 
 				case 0x03: { //Pitch slide toward target note (tone portamento)
 
-					//target_period, latched_period, current_period
-
-					if (channels_data[i].target_period > channels_data[i].current_period) {
-
-						channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].slide_rate);
-						//channels_data[i].current_period += channels_data[i].slide_rate;
-						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
-
-					} else if (channels_data[i].target_period < channels_data[i].current_period) {
-
-						channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].slide_rate);
-						//channels_data[i].current_period -= channels_data[i].slide_rate;
-						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
-
-					} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+					pitch_slide_directional(i);
 
 				} break;				
 
@@ -1006,69 +1065,15 @@ void process_tick() {
 
 				case 0x05: {//Volume Slide + Tone Portamento
 					
-					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
-					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
+					volume_slide(i, channels_data[i].current_effect_param);
 
-					if (slide_x) {
-
-						uint8_t slide_adjusted = (slide_x * 2);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-
-					} else {
-
-						uint8_t slide_adjusted = (slide_y * 2);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					}					
-
-					if (channels_data[i].target_period > channels_data[i].current_period) {
-
-						//channels_data[i].current_period += channels_data[i].slide_rate;
-						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate + channels_data[i].current_period);
-						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
-
-					} else if (channels_data[i].target_period < channels_data[i].current_period) {
-
-						//channels_data[i].current_period -= channels_data[i].slide_rate;
-						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate - channels_data[i].current_period);
-						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
-
-					} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+					pitch_slide_directional(i);
 
 				} break;	
 
 				case 0x06: {//Volume Slide + Vibrato
 
-					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
-					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
-
-					if (slide_x) {
-
-						uint8_t slide_adjusted = ((slide_x * 2) - 1);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-
-					} else {
-
-						uint8_t slide_adjusted = ((slide_y * 2) - 1);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					}						
+					volume_slide(i, channels_data[i].current_effect_param);					
 
 					uint16_t delta = sine_table[channels_data[i].vibrato_position & 31];
   					delta *= channels_data[i].vibrato_depth;
@@ -1092,8 +1097,8 @@ void process_tick() {
   					delta *= channels_data[i].tremolo_depth;
 					delta >>= 6; //Divide by 64
 
-					if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2));
-					else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2));
+					if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2) - 1);
+					else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2) - 1);
 					if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 					
@@ -1108,27 +1113,7 @@ void process_tick() {
 
 				case 0x0A: { //Volume slide
 
-					uint8_t slide_x = channels_data[i].current_effect_param >> 4;
-					uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
-					
-					if (slide_x) {
-
-						uint8_t slide_adjusted = (slide_x * 2);
-						channels_data[i].current_volume += slide_adjusted;
-						if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-						if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-
-					} else if (slide_y) {
-
-						uint8_t slide_adjusted = (slide_y * 2);
-						channels_data[i].current_volume -= slide_adjusted;
-						if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-						if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-						set_volume(i, channels_data[i].current_volume);
-						mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					}
+					volume_slide(i, channels_data[i].current_effect_param);
 
 				} break;
 
@@ -1192,8 +1177,8 @@ void draw_sample_bars() {
 	putch(0);
 	putch(0); //Black
 	
-	draw_rect(19,top_offset + 8,55,top_offset + 8  + (mod.sample_total * 4)); //Clear first column
-	draw_rect(89,top_offset + 8,160,top_offset + 8 + (mod.sample_total * 4)); //Clear second column
+	draw_rect(19,top_offset + 8,55,top_offset + 8  + ((1 + mod.sample_total) * 4)); //Clear first column
+	draw_rect(89,top_offset + 8,160,top_offset + 8 + ((1 + mod.sample_total) * 4)); //Clear second column
 	
 	putch(18);
 	putch(0);
@@ -1246,6 +1231,12 @@ void draw_sample_bars() {
 
 int main(int argc, char * argv[])
 {
+
+	// putch(17);
+	// putch(15);
+
+	// putch(26); //Reset viewports
+	// putch(0x0C); //CLS
 	
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
@@ -1304,6 +1295,10 @@ int main(int argc, char * argv[])
 	mod.pattern_max = 0;
 	mod.current_speed = 6;
 	mod.current_bpm = 125;
+
+	ticker = 0;
+	timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
+
 	mod.pattern_break_pending = false;
 	mod.order_break_pending = false;
 
@@ -1405,9 +1400,8 @@ int main(int argc, char * argv[])
 	verbose = true;
 	extra_verbose = false;
 
-	ticker = 0;
-	//timer0_begin(23040, 16);
-	timer0_begin(24000, 16); //Slightly off from 0.02s
+	
+	//timer_begin(TIMER_NO, 23040, 16); //0.02 seconds
 	mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint16_t old_key_count = sv->vkeycount;
@@ -1473,7 +1467,18 @@ int main(int argc, char * argv[])
 
 			if (sv->vkeycount != old_key_count) {
 
-				if (sv->keyascii == 27) break;
+				if (sv->keyascii == 27) {
+					break;
+				}
+
+				else if (sv->keyascii == 'q') {
+					break;
+				}
+
+				else if (sv->keyascii == '`') {
+					return 0; //To stop dead and examine the rows.
+				}				
+
 				else if (sv->keyascii == '+') {
 					global_volume += 5;
 					if (global_volume > 127) global_volume = 127;
