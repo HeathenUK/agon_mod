@@ -22,8 +22,7 @@ volatile void *timer0_prevhandler;
 volatile uint24_t ticker = 0;
 extern void timer_handler();
 
-//#define PD_HZ 187815
-#define PD_HZ 210000
+#define PD_HZ 187815
 
 #pragma pack(push, 1)
 
@@ -68,6 +67,7 @@ typedef struct {
 	uint8_t sample_volume[32];	
 	uint8_t sample_channel[32];
 	bool bad_samples;
+	uint24_t pd_hz;
 	
 } mod_header;
 
@@ -717,8 +717,8 @@ void fill_empty(uint8_t rows) {
 
 		if (effect_number == 0x09 && effect_param > 0) channels_data[i].latched_offset = effect_param * 256;
 
-		hz = channels_data[i].current_period > 0 ? PD_HZ / clamp_period(channels_data[i].current_period) : 0;
-		//hz = channels_data[i].current_period > 0 ? PD_HZ / channels_data[i].current_period : 0;
+		hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
+		//hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
@@ -945,8 +945,8 @@ void process_tick() {
 
 					channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].current_effect_param);
 					//channels_data[i].current_period -= slide;
-					set_frequency(i, PD_HZ / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, PD_HZ / channels_data[i].current_period);
+					set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 				} break;
 
@@ -959,8 +959,8 @@ void process_tick() {
 
 					channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].current_effect_param);
 					//channels_data[i].current_period += slide;
-					set_frequency(i, PD_HZ / channels_data[i].current_period);
-					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, PD_HZ / channels_data[i].current_period);
+					set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+					if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", channels_data[i].current_effect_param, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 				} break;
 
@@ -972,17 +972,17 @@ void process_tick() {
 
 						channels_data[i].current_period = clamp_period(channels_data[i].current_period + channels_data[i].slide_rate);
 						//channels_data[i].current_period += channels_data[i].slide_rate;
-						set_frequency(i, PD_HZ / channels_data[i].current_period);
+						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
 						channels_data[i].current_period = clamp_period(channels_data[i].current_period - channels_data[i].slide_rate);
 						//channels_data[i].current_period -= channels_data[i].slide_rate;
-						set_frequency(i, PD_HZ / channels_data[i].current_period);
+						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					} else set_frequency(i, PD_HZ / channels_data[i].current_period);
+					} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 
 				} break;				
 
@@ -992,10 +992,10 @@ void process_tick() {
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period + delta));
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / (channels_data[i].current_period + delta));					
+					if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
+					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));
+					// if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period - delta));
+					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period + delta));					
 		
 					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -1032,17 +1032,17 @@ void process_tick() {
 
 						//channels_data[i].current_period += channels_data[i].slide_rate;
 						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate + channels_data[i].current_period);
-						set_frequency(i, PD_HZ / channels_data[i].current_period);
+						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
 					} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
 						//channels_data[i].current_period -= channels_data[i].slide_rate;
 						channels_data[i].current_period = clamp_period(channels_data[i].slide_rate - channels_data[i].current_period);
-						set_frequency(i, PD_HZ / channels_data[i].current_period);
+						set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 						if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-					} else set_frequency(i, PD_HZ / channels_data[i].current_period);
+					} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 
 				} break;	
 
@@ -1074,10 +1074,10 @@ void process_tick() {
   					delta *= channels_data[i].vibrato_depth;
 					delta >>= 7; //Divide by 128
 
-					// if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / (channels_data[i].current_period - delta));
-					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / (channels_data[i].current_period + delta));
-					if (channels_data[i].vibrato_position < 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period - delta));
-					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, PD_HZ / clamp_period(channels_data[i].current_period + delta));					
+					// if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period - delta));
+					// else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / (channels_data[i].current_period + delta));
+					if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
+					else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
 		
 					if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -1246,10 +1246,17 @@ void draw_sample_bars() {
 
 int main(int argc, char * argv[])
 {
-	(void)argc;
 	
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
+
+	if (argc < 2) {
+		untidy_exit("Usage is playmod <file>");
+		return 0;
+	}
+
+	if (argc == 3) mod.pd_hz = atoi(argv[2]);
+	else mod.pd_hz = PD_HZ;
 
 	file = fopen(argv[1], "rb");
     if (file == NULL) {
@@ -1413,7 +1420,9 @@ int main(int argc, char * argv[])
 	
 	set_text_window(0,29,22,1);
 
-	printf("Agon_MOD\r\n\r\n");
+	printf("Agon_MOD");
+	if (mod.pd_hz != PD_HZ) printf(" [%06u]", mod.pd_hz);
+	printf("\r\n\r\n");
 	printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
  
 	for (uint8_t i = 1; i < 32;) {
