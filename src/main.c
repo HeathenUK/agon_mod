@@ -1192,8 +1192,8 @@ void draw_sample_bars() {
 	putch(0);
 	putch(0); //Black
 	
-	draw_rect(19,top_offset + 8,55,200); //Clear first column
-	draw_rect(89,top_offset + 8,160,200); //Clear second column
+	draw_rect(19,top_offset + 8,55,top_offset + 8  + (mod.sample_total * 4)); //Clear first column
+	draw_rect(89,top_offset + 8,160,top_offset + 8 + (mod.sample_total * 4)); //Clear second column
 	
 	putch(18);
 	putch(0);
