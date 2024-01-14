@@ -8,7 +8,7 @@
 #include <mos_api.h>
 
 #define CHUNK_SIZE 1024		//Sample upload chunk size in bytes
-#define PD_HZ 187815		//Magic number used to convert amiga periods to Agon frequencies (default 187815)
+#define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (default 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
 
 //ez80 defines
@@ -88,6 +88,7 @@ typedef struct {
 	uint8_t current_effect;
 	uint8_t current_effect_param;
 	uint16_t current_period;
+	uint16_t current_hz;
 	uint16_t target_period;
 	uint8_t slide_rate;
 	uint24_t latched_offset;
@@ -398,6 +399,17 @@ void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
 
 }
 
+void plot_point(uint16_t x1, uint16_t y1) {
+
+	//PLOT 69,x,y
+
+	putch(25);
+	putch(69);
+	write16bit(x1);
+	write16bit(y1);
+
+}
+
 void clear_buffer(uint16_t buffer_id) {
 	
 	putch(23);
@@ -484,6 +496,14 @@ void switch_buffers() {
 
 }
 
+void set_graphics_foreground(uint8_t colour) {
+
+	putch(18);
+	putch(0);
+	putch(colour);
+
+}
+
 void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
@@ -501,12 +521,23 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 
 void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
 
-	putch(28);
+	putch(0x1C);
 
 	putch(left);
 	putch(bottom);
 	putch(right);
 	putch(top);
+
+}
+
+void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+
+	putch(24);
+
+	write16bit(left);
+	write16bit(bottom);
+	write16bit(right);
+	write16bit(top);
 
 }
 
@@ -572,7 +603,7 @@ void tidy_exit(const char* exit_message) {
 	
 	timer_end(TIMER_NO);
 
-	//set_channel_rate(-1, 16384);
+	set_channel_rate(-1, 16384);
 
 	putch(17);
 	putch(15);
@@ -601,7 +632,7 @@ void untidy_exit(const char* exit_message) {
 	
 	timer_end(TIMER_NO);
 
-	//set_channel_rate(-1, 16384);
+	set_channel_rate(-1, 16384);
 
 	putch(17);
 	putch(15);
@@ -678,7 +709,17 @@ void fill_empty(uint8_t rows) {
 
 }
 
- void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
+void dispatch_channel(uint8_t i) {
+
+		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, channels_data[i].current_hz);
+		else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, channels_data[i].current_hz);
+		if (channels_data[i].current_effect == 0x09) set_position(i, channels_data[i].latched_offset);
+		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
+		channels_data[i].current_volume = channels_data[i].latched_volume;
+
+}
+
+void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
@@ -688,6 +729,9 @@ void fill_empty(uint8_t rows) {
 
 	if (verbose) {
 	
+		//putch(26);
+		//set_text_window(20,29,80,2);
+
 		if (row != 0) {
 			putch(17);
 			putch(15); // White row text
@@ -726,14 +770,14 @@ void fill_empty(uint8_t rows) {
 		effect_param = noteData[3];
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 
-		if (effect_number == 0x03 && effect_param > 0) { //Log the note as the effect's target, but don't use it now.
-			channels_data[i].slide_rate = effect_param; //If the effect has a parameter, use it as slide rate.
-			if (period) channels_data[i].target_period = period;
+		if (effect_number == 0x03 || effect_number == 0x05) {
+			if (period && effect_number == 0x03) channels_data[i].target_period = period;				//Log the note as effect 3/5's target, but don't use it now.
+			if (effect_param > 0 && effect_number == 0x03) channels_data[i].slide_rate = effect_param;	//If effect 3 has a parameter, use it as slide rate.			
 		} else if (period > 0) {
 			channels_data[i].current_period = period;
 		}
 
-		hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
+		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
 		//hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
@@ -744,7 +788,7 @@ void fill_empty(uint8_t rows) {
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 		
-		if (sample_number > 0 && (effect_number != 0x03) && (effect_number != 0x05)) {
+		if (sample_number > 0) {
 			
 			if (channels_data[i].latched_sample != sample_number) {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
@@ -756,15 +800,11 @@ void fill_empty(uint8_t rows) {
 			channels_data[i].current_volume = channels_data[i].latched_volume;
 			set_volume(i, channels_data[i].current_volume);
 
-			if (period > 0) {
+			if (period > 0 && (effect_number != 0x03) && (effect_number != 0x05)) {
 
 				if (effect_number == 0x09) channels_data[i].latched_offset = effect_param << 8;
 				
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
-				channels_data[i].current_volume = channels_data[i].latched_volume;
-				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
+				dispatch_channel(i);
 
 			}
 
@@ -774,11 +814,7 @@ void fill_empty(uint8_t rows) {
 
 				if (effect_number == 0x09) channels_data[i].latched_offset = effect_param << 8;
 				
-				if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, -1, hz);
-				else play_sample(channels_data[i].latched_sample, i, channels_data[i].latched_volume, 0, hz);
-				mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].latched_volume;
-				channels_data[i].current_volume = channels_data[i].latched_volume;
-				if (effect_number == 0x09) set_position(i, channels_data[i].latched_offset);
+				dispatch_channel(i);
 
 			}
 
@@ -878,7 +914,13 @@ void fill_empty(uint8_t rows) {
 							if (param_y == 0) channels_data[i].tremolo_retrigger = true;
 							else if (param_y == 4) channels_data[i].tremolo_retrigger = false;
 
-						} break;						
+						} break;			
+						
+						case 0x0D: {//Delay sample change
+
+							//TODO
+
+						} break;										
 
 					}
 
@@ -938,9 +980,7 @@ void fill_empty(uint8_t rows) {
 	putch(128); //Black row background	
 	printf(" \r\n");
 
-	putch(18);
-	putch(0);
-	putch(7); //Grey foreground
+	set_graphics_foreground(7);
 
 	draw_rect(178,      18,180,      230);
 
@@ -1001,21 +1041,31 @@ void pitch_slide_up(uint8_t i, uint8_t effect_param) {
 
 void pitch_slide_directional(uint8_t i) {
 
-	if (channels_data[i].target_period > channels_data[i].current_period) {
+	if (channels_data[i].target_period) {
 
-		channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
-		if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
-		set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-		if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
+		if (channels_data[i].target_period > channels_data[i].current_period) {
 
-	} else if (channels_data[i].target_period < channels_data[i].current_period) {
+			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
+			if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
+			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+			if (channels_data[i].current_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
+			if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
 
-		channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
-		if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
-		set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-		if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
+		} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
-	} else set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
+			if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
+			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+			if (channels_data[i].current_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
+			if (extra_verbose) printf("\r\nSliding %u to %u (toward %u) on channel %u", channels_data[i].slide_rate, channels_data[i].current_period, channels_data[i].target_period, i);
+
+		} else if (channels_data[i].target_period == channels_data[i].current_period) {
+
+			channels_data[i].target_period = 0;
+
+		}
+
+	}
 
 }
 
@@ -1165,27 +1215,36 @@ void logical_coords(bool on) {
 
 }
 
+void scroll_graphics_left(uint8_t scroll_x) {
+
+	//VDU 23, 7
+	putch(23);
+	putch(7);
+	putch(2); //Scroll graphics viewport
+	putch(1); //Scroll left
+	putch(scroll_x); //Scroll by scroll_x
+
+}
+
 void draw_sample_bars() {
 
 	switch_buffers();
+	set_graphics_window(0,239,639,0); //Ensure graphics window is full
 
-	uint8_t top_offset = 36 + 16;
+	uint8_t top_offset = 52;
 
-	putch(18);
-	putch(0);
-	putch(0); //Black
+	set_graphics_foreground(0);
 	
 	draw_rect(19,top_offset + 8,55,top_offset + 8  + ((1 + mod.sample_total) * 4)); //Clear first column
 	draw_rect(89,top_offset + 8,160,top_offset + 8 + ((1 + mod.sample_total) * 4)); //Clear second column
 	
-	putch(18);
-	putch(0);
-	putch(7);//Grey
-	draw_rect(25,32 + 16,154,38 + 16); //Volume back bar
-	putch(18);
-	putch(0);
-	putch(15);//White
-	draw_rect(26,33 + 16,26 + global_volume,37 + 16); //Volume front bar
+	set_graphics_foreground(7);
+
+	draw_rect(25,32 + 16,154,38 + 16); //Master volume back bar
+	
+	set_graphics_foreground(15);
+
+	draw_rect(26,33 + 16,26 + global_volume,37 + 16); //Master volume front bar
 
 	for (uint8_t i = 1, j = 0; i < 32;) {
 
@@ -1197,9 +1256,7 @@ void draw_sample_bars() {
 			j++;
 
 			if (mod.sample_volume[i] > 0) {
-				putch(18);
-				putch(0);
-				putch(9 + mod.sample_channel[i]);
+				set_graphics_foreground(9 + mod.sample_channel[i]);
 				draw_rect(20, top_offset + (j * 8) + 6, 20 + (mod.sample_volume[i] / 4), top_offset + (j * 8) + 8);
 			}
 
@@ -1210,9 +1267,7 @@ void draw_sample_bars() {
 			}
 
 			if (i < 32 && mod.sample_volume[i] > 0) {
-				putch(18);
-				putch(0);
-				putch(9 + mod.sample_channel[i]);
+				set_graphics_foreground(9 + mod.sample_channel[i]);
 				draw_rect(92, top_offset + (j * 8) + 6, 92 + (mod.sample_volume[i] / 4), top_offset + (j * 8) + 8);
 			}
 
@@ -1220,10 +1275,31 @@ void draw_sample_bars() {
 		} else break;
 
 	}
+	
+	//Volume area to scroll is (x1,y1,x2,y2) 
 
-	putch(18);
-	putch(0);
-	putch(15); //Return graphics colour to white.
+	set_graphics_window(12,230,150,198); //Left, bottom, right, top, remember
+
+	//Workaround for scrolling bug
+	set_graphics_foreground(7);
+	draw_rect(0,0,1,1);
+
+	scroll_graphics_left(2);
+
+	uint16_t mean_vol = 0;
+	for (uint8_t i = 0; i < mod.channels; i++) {
+		mean_vol += channels_data[i].current_volume;
+	}
+	mean_vol /= mod.channels;
+	mean_vol /= 4;
+
+	// set_graphics_foreground(15);
+	// draw_rect(154,228, 150,232 - max_vol); //Draw a max bar (white)
+
+	set_graphics_foreground(14);
+	draw_rect(154,228, 148,230 - mean_vol); //Draw a mean bar (cyan)
+	
+	set_graphics_window(0,239,639,0); //Ensure graphics window is full
 
 }
 
@@ -1260,8 +1336,10 @@ int main(int argc, char * argv[])
 		putch(4);
 	}
 
+	logical_coords(false);
+
 	set_volume(255, global_volume);
-	//set_channel_rate(-1, 32768);
+	set_channel_rate(-1, 24576);
 	//set_channel_rate(-1, 16384);
 	//set_channel_rate(-1, 8363);
 
@@ -1409,7 +1487,6 @@ int main(int argc, char * argv[])
 	
 	//Set up the UI
 	//left, bottom, right, top
-	
 	set_text_window(0,29,22,1);
 
 	printf("Agon_MOD");
@@ -1439,12 +1516,17 @@ int main(int argc, char * argv[])
 		printf("\r\n\r\nNOTE: Tiny samples\r\ndetected. These may\r\nnot play well (yet)");
 	}
 
-	logical_coords(false);
-	//draw_rect(10,20,30,40);
+	set_graphics_foreground(7);
+	//draw_rect(8,180,152,230); //Volume background
+	draw_rect(8,198,152,230); //Volume background
 	
 	set_text_window(20,2,80,1);
+
 	header_line();
+
+	//putch(26);
 	set_text_window(20,29,80,2);
+
 	fill_empty(27);
 
 	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
