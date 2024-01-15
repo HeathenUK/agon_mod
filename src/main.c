@@ -548,54 +548,631 @@ void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_
 bool verbose = true;
 bool extra_verbose = false;
 
-// const char* period_to_note(uint16_t period) {
-//     switch (period) {
-//         case 0:
-//             return "---";
+// uint16_t return_finetuned(uint16_t period, int8_t finetune) {
 
-//         // Most commonly used notes (assumed)
-//         case 110 ... 115: return "B-3";
-//         case 116 ... 122: return "A#3";
-//         case 123 ... 129: return "A-3";
-//         case 130 ... 137: return "G#3";
-//         case 138 ... 145: return "G-3";
-//         case 146 ... 154: return "F#3";
-//         case 155 ... 163: return "F-3";
-//         case 164 ... 173: return "E-3";
-//         case 174 ... 184: return "D#3";
-//         case 185 ... 195: return "D-3";
-//         case 196 ... 207: return "C#3";
-//         case 208 ... 217: return "C-3";
+//     switch (finetune) {
+//         case 0x0:
+// 			return period;
+// 		case 0x1:
+//             switch (period) {
 
-//         // Other notes
-//         case 218 ... 231: return "B-2";
-//         case 232 ... 246: return "A#2";
-//         case 247 ... 261: return "A-2";
-//         case 262 ... 277: return "G#2";
-//         case 278 ... 293: return "G-2";
-//         case 294 ... 310: return "F#2";
-//         case 311 ... 329: return "F-2";
-//         case 330 ... 349: return "E-2";
-//         case 350 ... 370: return "D#2";
-//         case 371 ... 392: return "D-2";
-//         case 393 ... 416: return "C#2";
-//         case 417 ... 440: return "C-2";
-//         case 441 ... 466: return "B-1";
-//         case 467 ... 493: return "A#1";
-//         case 494 ... 523: return "A-1";
-//         case 524 ... 553: return "G#1";
-//         case 554 ... 587: return "G-1";
-//         case 588 ... 621: return "F#1";
-//         case 622 ... 659: return "F-1";
-//         case 660 ... 698: return "E-1";
-//         case 699 ... 740: return "D#1";
-//         case 741 ... 784: return "D-1";
-//         case 785 ... 832: return "C#1";
-//         case 833 ... 872: return "C-1";  // Assuming 872 is the upper limit for C-1
+// 				case 856: return 850;
+// 				case 808: return 802;
+// 				case 762: return 757;
+// 				case 720: return 715;
+// 				case 678: return 674;
+// 				case 640: return 637;
+// 				case 604: return 601;
+// 				case 570: return 567;
+// 				case 538: return 535;
+// 				case 508: return 505;
+// 				case 480: return 477;
+// 				case 453: return 450;
+// 				case 428: return 425;
+// 				case 404: return 401;
+// 				case 381: return 379;
+// 				case 360: return 357;
+// 				case 339: return 337;
+// 				case 320: return 318;
+// 				case 302: return 300;
+// 				case 285: return 284;
+// 				case 269: return 268;
+// 				case 254: return 253;
+// 				case 240: return 239;
+// 				case 226: return 225;
+// 				case 214: return 213;
+// 				case 202: return 201;
+// 				case 190: return 189;
+// 				case 180: return 179;
+// 				case 170: return 169;
+// 				case 160: return 159;
+// 				case 151: return 150;
+// 				case 143: return 142;
+// 				case 135: return 134;
+// 				case 127: return 126;
+// 				case 120: return 119;
+// 				case 113: return 113;
 
-//         default: return "???";
-//     }
-// }		
+// 			}
+// 		case 0x2:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+
+// 			}
+// 		case 0x3:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}				
+// 		case 0x4:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0x5:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0x6:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0x7:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0x8:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0x9:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}																		
+// 		case 0xA:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}																		
+// 		case 0xB:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}																		
+// 		case 0xC:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0xD:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0xE:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		case 0xF:
+//             switch (period) {
+
+// 				case 856: return 
+// 				case 808: return 
+// 				case 762: return 
+// 				case 720: return 
+// 				case 678: return 
+// 				case 640: return 
+// 				case 604: return 
+// 				case 570: return 
+// 				case 538: return 
+// 				case 508: return 
+// 				case 480: return 
+// 				case 453: return 
+// 				case 428: return 
+// 				case 404: return 
+// 				case 381: return 
+// 				case 360: return 
+// 				case 339: return 
+// 				case 320: return 
+// 				case 302: return 
+// 				case 285: return 
+// 				case 269: return 
+// 				case 254: return 
+// 				case 240: return 
+// 				case 226: return 
+// 				case 214: return 
+// 				case 202: return 
+// 				case 190: return 
+// 				case 180: return 
+// 				case 170: return 
+// 				case 160: return 
+// 				case 151: return 
+// 				case 143: return 
+// 				case 135: return 
+// 				case 127: return 
+// 				case 120: return 
+// 				case 113: return 
+				
+// 			}
+// 		default:
+// 			return 0;
+// 	}
+
+// }	
 
 const char* period_to_note(uint16_t period) {
 
