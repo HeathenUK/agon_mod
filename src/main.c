@@ -842,7 +842,8 @@ void fine_volume_slide_down(uint8_t i, uint8_t vol) {
 void pitch_slide_down(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+	set_frequency(i, channels_data[i].current_hz);
 	#ifdef EXTRA_VERBOSE_PITCHSLIDE
 	printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 	#endif
@@ -852,7 +853,8 @@ void pitch_slide_down(uint8_t i, uint8_t period) {
 void pitch_slide_up(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+	set_frequency(i, channels_data[i].current_hz);
 	#ifdef EXTRA_VERBOSE_PITCHSLIDE
 	printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 	#endif
@@ -873,7 +875,8 @@ void pitch_slide_directional(uint8_t i) {
 
 			channels_data[i].current_period = clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
 
-			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+			set_frequency(i, channels_data[i].current_hz);
 			if (channels_data[i].current_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
 
 		} else if (channels_data[i].target_period < channels_data[i].current_period) {
@@ -886,7 +889,9 @@ void pitch_slide_directional(uint8_t i) {
 			
 			channels_data[i].current_period = clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
 
-			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+			set_frequency(i, channels_data[i].current_hz);
+
 			if (channels_data[i].current_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
 
 		} else if (channels_data[i].target_period == channels_data[i].current_period) {
@@ -905,8 +910,13 @@ void do_vibrato(uint8_t i) {
 	delta *= channels_data[i].vibrato_depth;
 	delta >>= 7; //Divide by 128
 
-	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
-	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));					
+	if (channels_data[i].vibrato_position < 0) {
+		channels_data[i].current_hz = mod.pd_hz / (clamp_period(channels_data[i].current_period - delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
+		set_frequency(i, channels_data[i].current_hz);
+	} else if (channels_data[i].vibrato_position >= 0) {
+		channels_data[i].current_hz = mod.pd_hz / (clamp_period(channels_data[i].current_period + delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
+		set_frequency(i, channels_data[i].current_hz);
+	}
 
 	#ifdef EXTRA_VERBOSE_VIBRATO
 	printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
@@ -1280,13 +1290,16 @@ void process_tick() {
 
 					uint8_t r = mod.tick_no % 3;
 					if (r == 0) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
+						channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 					else if (r == 1) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (x * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+						channels_data[i].current_hz = mod.pd_hz / clamp_period((channels_data[i].current_period) + (x * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 					else if (r == 2) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (y * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+						channels_data[i].current_hz = mod.pd_hz / clamp_period((channels_data[i].current_period) + (y * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 
 				} break;
