@@ -76,8 +76,6 @@ typedef struct {
 	uint8_t new_row;
 	uint8_t sample_total;	
 	bool sample_live[32];
-	uint16_t sample_max_period;
-	uint16_t sample_min_period;
 	uint8_t sample_volume[32];	
 	uint8_t sample_channel[32];
 	bool bad_samples;
@@ -547,66 +545,42 @@ void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_
 
 }
 
-//Value:    0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-//Finetune: 0  +1  +2  +3  +4  +5  +6  +7  -8  -7  -6  -5  -4  -3  -2  -1
+bool verbose = true;
+bool extra_verbose = false;
 
-const uint16_t periods[] = {
-	 856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113
-	};
-const int8_t finetune_offsets[][36] = {
-	{-6,-6,-5,-5,-4,-3,-3,-3,-3,-3,-3,-3,-3,-3,-2,-3,-2,-2,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0},
-    {-12,-12,-10,-11,-8,-8,-7,-7,-6,-6,-6,-6,-6,-6,-5,-5,-4,-4,-4,-3,-3,-3,-3,-2,-3,-3,-2,-3,-3,-2,-2,-2,-2,-2,-2,-1},
-    {-18,-17,-16,-16,-13,-12,-12,-11,-10,-10,-10,-9,-9,-9,-8,-8,-7,-6,-6,-5,-5,-5,-5,-4,-5,-4,-3,-4,-4,-3,-3,-3,-3,-2,-2,-2},
-    {-24,-23,-21,-21,-18,-17,-16,-15,-14,-13,-13,-12,-12,-12,-11,-10,-9,-8,-8,-7,-7,-7,-7,-6,-6,-6,-5,-5,-5,-4,-4,-4,-4,-3,-3,-3},
-    {-30,-29,-26,-26,-23,-21,-20,-19,-18,-17,-17,-16,-15,-14,-13,-13,-11,-11,-10,-9,-9,-9,-8,-7,-8,-7,-6,-6,-6,-5,-5,-5,-5,-4,-4,-4},
-    {-36,-34,-32,-31,-27,-26,-24,-23,-22,-21,-20,-19,-18,-17,-16,-15,-14,-13,-12,-11,-11,-10,-10,-9,-9,-9,-7,-8,-7,-6,-6,-6,-6,-5,-5,-4},
-    {-42,-40,-37,-36,-32,-30,-29,-27,-25,-24,-23,-22,-21,-20,-18,-18,-16,-15,-14,-13,-13,-12,-12,-10,-10,-10,-9,-9,-9,-8,-7,-7,-7,-6,-6,-5},
-    {51,48,46,42,42,38,36,34,32,30,28,27,25,24,23,21,21,19,18,17,16,15,14,14,12,12,12,10,10,10,9,8,8,8,7,7},
-    {44,42,40,37,37,35,32,31,29,27,25,24,22,21,20,19,18,17,16,15,15,14,13,12,11,10,10,9,9,9,8,7,7,7,6,6},
-    {38,36,34,32,31,30,28,27,25,24,22,21,19,18,17,16,16,15,14,13,13,12,11,11,9,9,9,8,7,7,7,6,6,6,5,5},
-	{31,30,29,26,26,25,24,22,21,20,18,17,16,15,14,13,13,12,12,11,11,10,9,9,8,7,8,7,6,6,6,5,5,5,5,5},
-	{25,24,23,21,21,20,19,18,17,16,14,14,13,12,11,10,11,10,10,9,9,8,7,7,6,6,6,5,5,5,5,4,4,4,3,4},
-	{19,18,17,16,16,15,15,14,13,12,11,10,9,9,9,8,8,8,7,7,7,6,5,6,5,4,5,4,4,4,4,3,3,3,3,3},
-	{12,12,12,10,11,11,10,10,9,8,7,7,6,6,6,5,6,5,5,5,5,4,4,4,3,3,3,3,2,3,3,2,2,2,2,2},
-	{6,6,6,5,6,6,6,5,5,5,4,4,3,3,3,3,3,3,3,3,3,2,2,2,2,1,2,1,1,1,1,1,1,1,1,1},
+const uint16_t tunings[][36] = {
+	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113},
+	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113},
+	{844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,224,211,199,188,177,167,158,149,141,133,125,118,112},
+	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113},
+	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113},
+	{844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,224,211,199,188,177,167,158,149,141,133,125,118,112},
+	{838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118,111},
+	{832,785,741,699,660,623,588,555,524,495,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,124,117,110},
+	{826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116,109},
+	{820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115,109},
+	{814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,204,192,181,171,161,152,144,136,128,121,114,108},
+	{907,856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120},
+	{900,850,802,757,715,675,636,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,238,225,212,200,189,179,169,159,150,142,134,126,119},
+	{894,844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,223,211,199,188,177,167,158,149,141,133,125,118},
+	{887,838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118},
+	{881,832,785,741,699,660,623,588,555,524,494,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,123,117},
+	{875,826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116},
+	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115},
+	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114},
 };
 
-const uint16_t tune_min[] = {
-    113, 113, 112, 111, 110, 109, 109, 108, 120, 119, 118, 118, 117, 116, 115, 114
-};
+uint16_t finetune(uint16_t period, uint8_t finetune_value) {
 
-const uint16_t tune_max[] = {
-    856, 850, 844, 838, 832, 826, 820, 814, 907, 900, 894, 887, 881, 875, 868, 862
-};
+    const size_t tunings_count = sizeof(tunings) / sizeof(tunings[0]);
 
-uint16_t clamp_period(uint16_t period, uint8_t finetune) {
-    if (finetune > 0 && finetune < 0x0F) {
-        if (period <= tune_min[finetune]) return tune_min[finetune];
-        if (period >= tune_max[finetune]) return tune_max[finetune];
-    } else {
-		return 0;
-    }
-    return period;
-}
-
-int16_t clamp_volume(int8_t volume) {
-    if (volume <= 0) return 0;
-    else if (volume >= 127) return 127;
-    else return volume;
-}
-
-uint16_t finetune(uint16_t period, uint8_t finetune) {
-    size_t periods_count = sizeof(periods) / sizeof(periods[0]);
-    size_t finetune_count = sizeof(finetune_offsets) / sizeof(finetune_offsets[0]);
-
-    if (finetune < 0 || finetune >= finetune_count) {
+    if (finetune_value < 0 || finetune_value >= tunings_count) {
         return 0;
     }
 
-    for (size_t i = periods_count; i-- > 0; ) {
-        if (periods[i] == period) {
-            if (finetune == 0) return clamp_period(period, finetune);
-			else return clamp_period(period + finetune_offsets[finetune][i], finetune);
+    for (size_t i = 36; i-- > 0; ) {
+        if (tunings[0][i] == period) {
+            return tunings[finetune_value][i];
         }
     }
 
@@ -701,6 +675,18 @@ void handle_exit(const char* exit_message, bool tidy) {
 
 }
 
+uint16_t clamp_period(uint16_t period) {
+    if (period <= 108) return 108;
+    else if (period >= 907) return 907;
+    else return period;
+}
+
+int16_t clamp_volume(int8_t volume) {
+    if (volume <= 0) return 0;
+    else if (volume >= 127) return 127;
+    else return volume;
+}
+
 void fill_empty(uint8_t rows) {
 			
 	putch(0x1E);
@@ -758,22 +744,9 @@ void fill_empty(uint8_t rows) {
 
 void dispatch_channel(uint8_t i) {
 
-		if (mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE) {
-			channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-		}
-
-		channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-
-		if (channels_data[i].current_effect == 0x0E) {
-
-			if (channels_data[i].current_effect_param >> 4 == 0x05) {
-
-				channels_data[i].current_period = finetune(channels_data[i].current_period, channels_data[i].current_effect_param & 0x0F);
-				channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-
-			}
-
-		}
+		channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+		
+		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
 
 		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
 		else play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, 0, channels_data[i].current_hz);
@@ -792,9 +765,7 @@ void volume_slide(uint8_t i, uint8_t effect_param) {
 		uint8_t slide_adjusted = (slide_x * 2) - 1;
 		channels_data[i].current_volume += slide_adjusted;
 		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		#ifdef EXTRA_VERBOSE_VOLSLIDE
-		printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-		#endif
+		if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -803,9 +774,7 @@ void volume_slide(uint8_t i, uint8_t effect_param) {
 		uint8_t slide_adjusted = (slide_y * 2) - 1;
 		channels_data[i].current_volume -= slide_adjusted;
 		if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-		#ifdef EXTRA_VERBOSE_VOLSLIDE
-		printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-		#endif
+		if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 	}		
@@ -817,9 +786,7 @@ void fine_volume_slide_up(uint8_t i, uint8_t vol) {
 		uint8_t slide_adjusted = (vol * 2) - 1;
 		channels_data[i].current_volume += slide_adjusted;
 		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		#ifdef EXTRA_VERBOSE_VOLSLIDE
 		if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
-		#endif
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;	
 
@@ -830,9 +797,7 @@ void fine_volume_slide_down(uint8_t i, uint8_t vol) {
 	uint8_t slide_adjusted = (vol * 2) - 1;
 	channels_data[i].current_volume -= slide_adjusted;
 	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-	#ifdef EXTRA_VERBOSE_VOLSLIDE
-	printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
-	#endif
+	if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
 	set_volume(i, channels_data[i].current_volume);
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -840,23 +805,17 @@ void fine_volume_slide_down(uint8_t i, uint8_t vol) {
 
 void pitch_slide_down(uint8_t i, uint8_t period) {
 
-	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-	channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-	set_frequency(i, channels_data[i].current_hz);
-	#ifdef EXTRA_VERBOSE_PITCHSLIDE
-	printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
-	#endif
+	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period);
+	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
 void pitch_slide_up(uint8_t i, uint8_t period) {
 
-	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-	channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-	set_frequency(i, channels_data[i].current_hz);
-	#ifdef EXTRA_VERBOSE_PITCHSLIDE
-	printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
-	#endif
+	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period);
+	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
+	if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
@@ -866,31 +825,20 @@ void pitch_slide_directional(uint8_t i) {
 
 		if (channels_data[i].target_period > channels_data[i].current_period) {
 
-			#ifdef EXTRA_VERBOSE_PITCHSLIDE
-			printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			#endif
+			if (extra_verbose) printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
 			if (channels_data[i].current_period > channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-
-			channels_data[i].current_period = clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-
-			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-			set_frequency(i, channels_data[i].current_hz);
+			if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
+			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 			if (channels_data[i].current_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
 
 		} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
-			#ifdef EXTRA_VERBOSE_PITCHSLIDE
-			printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			#endif
+			if (extra_verbose) printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
 			if (channels_data[i].current_period < channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-			
-			channels_data[i].current_period = clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-
-			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
-			set_frequency(i, channels_data[i].current_hz);
-
+			if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
+			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 			if (channels_data[i].current_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
 
 		} else if (channels_data[i].target_period == channels_data[i].current_period) {
@@ -909,17 +857,10 @@ void do_vibrato(uint8_t i) {
 	delta *= channels_data[i].vibrato_depth;
 	delta >>= 7; //Divide by 128
 
-	if (channels_data[i].vibrato_position < 0) {
-		channels_data[i].current_hz = mod.pd_hz / (clamp_period(channels_data[i].current_period - delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
-		set_frequency(i, channels_data[i].current_hz);
-	} else if (channels_data[i].vibrato_position >= 0) {
-		channels_data[i].current_hz = mod.pd_hz / (clamp_period(channels_data[i].current_period + delta, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE));
-		set_frequency(i, channels_data[i].current_hz);
-	}
+	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
+	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
 
-	#ifdef EXTRA_VERBOSE_VIBRATO
-	printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
-	#endif
+	if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
 	channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
 	if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
@@ -938,6 +879,8 @@ void do_tremulo(uint8_t i) {
 	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 	
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+
+	//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
 	channels_data[i].tremolo_position += channels_data[i].tremolo_speed;
 	if (channels_data[i].tremolo_position > 31) channels_data[i].tremolo_position -= 64;
@@ -997,7 +940,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 
 		if (effect_number == 0x03 || effect_number == 0x05) {
-			if (period && effect_number == 0x03) channels_data[i].target_period = finetune(period, mod.header.sample[sample_number - 1].FINE_TUNE);				//Log the note as effect 3/5's target, but don't use it now.
+			if (period && effect_number == 0x03) channels_data[i].target_period = finetune(period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);				//Log the note as effect 3/5's target, but don't use it now.
 			if (effect_param > 0 && effect_number == 0x03) channels_data[i].slide_rate = effect_param;	//If effect 3 has a parameter, use it as slide rate.
 		} else if (period > 0) {
 			channels_data[i].current_period = period;
@@ -1008,15 +951,15 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			channels_data[i].current_effect_param = effect_param;
 		} else channels_data[i].current_effect = 0xFF;
 
+		// Output the decoded note information
+		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
+		
 		if (sample_number > 0) {
-
+			
 			if (channels_data[i].latched_sample != sample_number) {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
 				mod.sample_channel[channels_data[i].latched_sample] = i;
 			}
-
-			//channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period, mod.header.sample[sample_number - 1].FINE_TUNE) : 0;
-			
 			channels_data[i].latched_sample = sample_number;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
 			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
@@ -1032,7 +975,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			} else if (period > 0 && ((effect_number == 0x03) || (effect_number == 0x05)) && swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) {
 
 				channels_data[i].latched_offset = swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2;
-				
 				dispatch_channel(i);
 
 			}
@@ -1105,9 +1047,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 					set_volume(i, channels_data[i].current_volume);
 					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					#ifdef EXTRA_VERBOSE_VOLSET
-					printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
-					#endif
+					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
 
 				} break;				
 
@@ -1152,16 +1092,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						} break;
 
-						case 0x05: {//Override finetune
-
-							if (period) {
-
-								
-
-							}
-
-						} break;						
-
 						case 0x07: {//Set waveform (tremolo)
 
 							if (param_y == 0) channels_data[i].tremolo_retrigger = true;
@@ -1197,9 +1127,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 					if (channels_data[i].current_effect_param < 0x20) { //<0x20 means speed (i.e. ticks per row)
 
 						mod.current_speed = channels_data[i].current_effect_param;
-						#ifdef EXTRA_VERBOSE_TEMPBPM
-						printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
-						#endif
+						if (extra_verbose) printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
 
 					}
 
@@ -1208,9 +1136,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 						mod.current_bpm = channels_data[i].current_effect_param;
 						timer_end(TIMER_NO);
 						timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
-						#ifdef EXTRA_VERBOSE_TEMPBPM
-						printf("\r\nBPM set to %u.", channels_data[i].current_effect_param);
-						#endif						
 
 					}
 
@@ -1289,16 +1214,13 @@ void process_tick() {
 
 					uint8_t r = mod.tick_no % 3;
 					if (r == 0) {
-						channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-						set_frequency(i, channels_data[i].current_hz);
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period));
 					}
 					else if (r == 1) {
-						channels_data[i].current_hz = mod.pd_hz / clamp_period((channels_data[i].current_period) + (x * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-						set_frequency(i, channels_data[i].current_hz);
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (x * 8));
 					}
 					else if (r == 2) {
-						channels_data[i].current_hz = mod.pd_hz / clamp_period((channels_data[i].current_period) + (y * 8), mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-						set_frequency(i, channels_data[i].current_hz);
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (y * 8));
 					}
 
 				} break;
@@ -1495,6 +1417,9 @@ void draw_sample_bars() {
 
 int main(int argc, char * argv[])
 {
+
+	verbose = true;
+	extra_verbose = false;
 	
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
@@ -1555,7 +1480,8 @@ int main(int argc, char * argv[])
 		mod.channels = 28;//28 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, 8192);
-		#endif
+		#endif				
+		 verbose = false;
 	}
 	else {
 
@@ -1592,6 +1518,12 @@ int main(int argc, char * argv[])
 	//Number of patterns * number of channels * number of bytes per note per channel * number of notes per pattern (i.e. 1024 bytes per 4 channel pattern)
 	mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
 	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
+
+	// if (extra_verbose) printf("Module name: %s\r\n", mod.header.name);
+	// if (extra_verbose) printf("Song length: %u\r\n", mod.header.num_orders);
+	// if (extra_verbose) printf("Mod patterns: %u\r\n", mod.pattern_max);
+	// if (extra_verbose) printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
+	// if (extra_verbose) printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
 
 	uint8_t *temp_sample_buffer;
 	mod.sample_total = 0;
