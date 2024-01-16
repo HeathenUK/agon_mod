@@ -548,631 +548,52 @@ void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_
 bool verbose = true;
 bool extra_verbose = false;
 
-// uint16_t return_finetuned(uint16_t period, int8_t finetune) {
+//Value:    0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+//Finetune: 0  +1  +2  +3  +4  +5  +6  +7  -8  -7  -6  -5  -4  -3  -2  -1
 
-//     switch (finetune) {
-//         case 0x0:
-// 			return period;
-// 		case 0x1:
-//             switch (period) {
+typedef struct {
+    uint16_t tuned_period;
+    const char* name;
+} note_data;
 
-// 				case 856: return 850;
-// 				case 808: return 802;
-// 				case 762: return 757;
-// 				case 720: return 715;
-// 				case 678: return 674;
-// 				case 640: return 637;
-// 				case 604: return 601;
-// 				case 570: return 567;
-// 				case 538: return 535;
-// 				case 508: return 505;
-// 				case 480: return 477;
-// 				case 453: return 450;
-// 				case 428: return 425;
-// 				case 404: return 401;
-// 				case 381: return 379;
-// 				case 360: return 357;
-// 				case 339: return 337;
-// 				case 320: return 318;
-// 				case 302: return 300;
-// 				case 285: return 284;
-// 				case 269: return 268;
-// 				case 254: return 253;
-// 				case 240: return 239;
-// 				case 226: return 225;
-// 				case 214: return 213;
-// 				case 202: return 201;
-// 				case 190: return 189;
-// 				case 180: return 179;
-// 				case 170: return 169;
-// 				case 160: return 159;
-// 				case 151: return 150;
-// 				case 143: return 142;
-// 				case 135: return 134;
-// 				case 127: return 126;
-// 				case 120: return 119;
-// 				case 113: return 113;
+const uint16_t periods[] = {856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, 428, 404, 381, 360, 339, 320, 302, 285, 269, 254, 240, 226, 214, 202, 190, 180, 170, 160, 151, 143, 135, 127, 120, 113};
 
-// 			}
-// 		case 0x2:
-//             switch (period) {
+const int8_t finetune_offsets[][36] = {
+	//{000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000},
+    {-06,-06,-05,-05,-04,-03,-03,-03,-03,-03,-03,-03,-03,-03,-02,-03,-02,-02,-02,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,000},
+    {-12,-12,-10,-11,-08,-08,-07,-07,-06,-06,-06,-06,-06,-06,-05,-05,-04,-04,-04,-03,-03,-03,-03,-02,-03,-03,-02,-03,-03,-02,-02,-02,-02,-02,-02,-01},
+	{-18,-17,-16,-16,-13,-12,-12,-11,-10,-10,-10,-09,-09,-09,-08,-08,-07,-06,-06,-05,-05,-05,-05,-04,-05,-04,-03,-04,-04,-03,-03,-03,-03,-02,-02,-02},
+	{-24,-23,-21,-21,-18,-17,-16,-15,-14,-13,-13,-12,-12,-12,-11,-10,-09,-08,-08,-07,-07,-07,-07,-06,-06,-06,-05,-05,-05,-04,-04,-04,-04,-03,-03,-03},
+	{-30,-29,-26,-26,-23,-21,-20,-19,-18,-17,-17,-16,-15,-14,-13,-13,-11,-11,-10,-09,-09,-09,-08,-07,-08,-07,-06,-06,-06,-05,-05,-05,-05,-04,-04,-04},
+	{-36,-34,-32,-31,-27,-26,-24,-23,-22,-21,-20,-19,-18,-17,-16,-15,-14,-13,-12,-11,-11,-10,-10,-09,-09,-09,-07,-08,-07,-06,-06,-06,-06,-05,-05,-04},
+	{-42,-40,-37,-36,-32,-30,-29,-27,-25,-24,-23,-22,-21,-20,-18,-18,-16,-15,-14,-13,-13,-12,-12,-10,-10,-10,-09,-09,-09,-08,-07,-07,-07,-06,-06,-05},
+	{051,048,046,042,042,038,036,034,032,030,028,027,025,024,023,021,021,019,018,017,016,015,014,014,012,012,012,010,010,010,009,008,008,008,007,007},
+	{404,042,040,037,037,035,032,031,029,027,025,024,022,021,020,019,018,017,016,015,015,014,013,012,011,010,010,009,009,009,008,007,007,007,006,006},
+	{038,036,034,032,031,030,028,027,025,024,022,021,019,018,017,016,016,015,014,013,013,012,011,011,009,009,009,008,007,007,007,006,006,006,005,005},
+	{031,030,029,026,026,025,024,022,021,020,018,017,016,015,014,013,013,012,012,011,011,010,009,009,008,007,008,007,006,006,006,005,005,005,005,005},
+	{025,024,023,021,021,020,019,018,017,016,014,014,013,012,011,010,011,010,010,009,009,008,007,007,006,006,006,005,005,005,005,004,004,004,003,004},
+	{019,018,017,016,016,015,015,014,013,012,011,010,009,009,009,008,008,008,007,007,007,006,005,006,005,004,005,004,004,004,004,003,003,003,003,003},
+	{012,012,012,010,011,011,010,010,009,008,007,007,006,006,006,005,006,005,005,005,005,004,004,004,003,003,003,003,002,003,003,002,002,002,002,002},
+	{006,006,006,005,006,006,006,005,005,005,004,004,003,003,003,003,003,003,003,003,003,002,002,002,002,001,002,001,001,001,001,001,001,001,001,001},
+};
 
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
+uint16_t finetune(uint16_t period, int8_t finetune) {
+    size_t periods_count = sizeof(periods) / sizeof(periods[0]);
+    size_t finetune_count = sizeof(finetune_values) / sizeof(finetune_values[0]);
 
-// 			}
-// 		case 0x3:
-//             switch (period) {
+    if (finetune < 0 || finetune >= finetune_count) {
+        return 0;
+    }
 
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}				
-// 		case 0x4:
-//             switch (period) {
+    for (size_t i = 0; i < periods_count; ++i) {
+        if (periods[i] == period) {
+            if (finetune == 0) return period;
+			else return period + finetune_values[finetune][i];
+        }
+    }
 
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0x5:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0x6:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0x7:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0x8:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0x9:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}																		
-// 		case 0xA:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}																		
-// 		case 0xB:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}																		
-// 		case 0xC:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0xD:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0xE:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		case 0xF:
-//             switch (period) {
-
-// 				case 856: return 
-// 				case 808: return 
-// 				case 762: return 
-// 				case 720: return 
-// 				case 678: return 
-// 				case 640: return 
-// 				case 604: return 
-// 				case 570: return 
-// 				case 538: return 
-// 				case 508: return 
-// 				case 480: return 
-// 				case 453: return 
-// 				case 428: return 
-// 				case 404: return 
-// 				case 381: return 
-// 				case 360: return 
-// 				case 339: return 
-// 				case 320: return 
-// 				case 302: return 
-// 				case 285: return 
-// 				case 269: return 
-// 				case 254: return 
-// 				case 240: return 
-// 				case 226: return 
-// 				case 214: return 
-// 				case 202: return 
-// 				case 190: return 
-// 				case 180: return 
-// 				case 170: return 
-// 				case 160: return 
-// 				case 151: return 
-// 				case 143: return 
-// 				case 135: return 
-// 				case 127: return 
-// 				case 120: return 
-// 				case 113: return 
-				
-// 			}
-// 		default:
-// 			return 0;
-// 	}
-
-// }	
+    return 0;
+}
 
 const char* period_to_note(uint16_t period) {
 
@@ -1330,6 +751,11 @@ void fill_empty(uint8_t rows) {
 }
 
 void dispatch_channel(uint8_t i) {
+
+		if (mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE) {
+			channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+		}
 
 		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
 		else play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, 0, channels_data[i].current_hz);
@@ -1539,9 +965,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 		// Output the decoded note information
 		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
-		
+
 		if (sample_number > 0) {
-			
+
 			if (channels_data[i].latched_sample != sample_number) {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
 				mod.sample_channel[channels_data[i].latched_sample] = i;
@@ -1561,6 +987,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			} else if (period > 0 && ((effect_number == 0x03) || (effect_number == 0x05)) && swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) {
 
 				channels_data[i].latched_offset = swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2;
+				
 				dispatch_channel(i);
 
 			}
