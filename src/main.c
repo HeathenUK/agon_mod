@@ -557,31 +557,31 @@ const uint16_t tunings[][36] = {
 	{826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116,109}, //5
 	{820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115,109}, //6
 	{814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,204,192,181,171,161,152,144,136,128,121,114,108}, //7
-	{907,856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120}, //8
-	{900,850,802,757,715,675,636,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,238,225,212,200,189,179,169,159,150,142,134,126,119}, //9
-	{894,844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,223,211,199,188,177,167,158,149,141,133,125,118}, //A
-	{887,838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118}, //B
-	{881,832,785,741,699,660,623,588,555,524,494,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,123,117}, //C
-	{875,826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116}, //D
-	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115}, //E
-	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F
+	{907,856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120}, //8 -8
+	{900,850,802,757,715,675,636,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,238,225,212,200,189,179,169,159,150,142,134,126,119}, //9 -7
+	{894,844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,223,211,199,188,177,167,158,149,141,133,125,118}, //A -6
+	{887,838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118}, //B -5
+	{881,832,785,741,699,660,623,588,555,524,494,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,123,117}, //C -4
+	{875,826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116}, //D -3
+	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115}, //E -2
+	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F -1
 };
 
 uint16_t finetune(uint16_t period, uint8_t finetune_value) {
 
     const size_t tunings_count = sizeof(tunings) / sizeof(tunings[0]);
 
-    if (finetune_value < 0 || finetune_value >= tunings_count) {
-        return 0;
+    if (finetune_value < 0 || finetune_value > tunings_count) {
+        finetune_value = 0;
     }
 
-    for (size_t i = 36; i-- > 0; ) {
+    for (size_t i = 35; i-- >= 0; ) {
         if (tunings[0][i] == period) {
             return tunings[finetune_value][i];
         }
     }
 
-    return 0;
+    return 320;
 }
 
 const char* period_to_note(uint16_t period) {
@@ -825,7 +825,6 @@ void pitch_slide_directional(uint8_t i) {
 			//////if (extra_verbose) printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
 			if (channels_data[i].current_period > channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-			if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
 			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 			if (channels_data[i].current_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
 
@@ -834,7 +833,6 @@ void pitch_slide_directional(uint8_t i) {
 			//////if (extra_verbose) printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
 			if (channels_data[i].current_period < channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-			if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
 			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
 			if (channels_data[i].current_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
 
@@ -1509,12 +1507,6 @@ int main(int argc, char * argv[])
 	mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
 	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
 
-	// ////if (extra_verbose) printf("Module name: %s\r\n", mod.header.name);
-	// ////if (extra_verbose) printf("Song length: %u\r\n", mod.header.num_orders);
-	// ////if (extra_verbose) printf("Mod patterns: %u\r\n", mod.pattern_max);
-	// ////if (extra_verbose) printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
-	// ////if (extra_verbose) printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
-
 	uint8_t *temp_sample_buffer;
 	mod.sample_total = 0;
 	
@@ -1534,9 +1526,9 @@ int main(int argc, char * argv[])
 			// 	printf(" %02u bytes, def. vol %02X", (sample_length_swapped * 2), mod.header.sample[i - 1].VOLUME);			
 			// 	printf(", loop start %05u", sample_loop_start_swapped * 2);
 			// 	printf(", loop length %05u", sample_loop_length_swapped * 2);
+			// 	printf(", finetune byte %u", mod.header.sample[i - 1].FINE_TUNE);
 			// 	printf("\r\n");
-			// 	untidy_handle_exit(NULL);
-			//	return 0;
+			// 	return 0;
 			// }
 
 			if ((sample_length_swapped * 2) < 300) mod.bad_samples = true;
@@ -1632,10 +1624,6 @@ int main(int argc, char * argv[])
 
 			} else break;
 
-		}
-
-		if (mod.bad_samples) {
-			printf("\r\n\r\nNOTE: Tiny samples\r\ndetected. These may\r\nnot play well (yet)");
 		}
 
 		set_graphics_foreground(7);
