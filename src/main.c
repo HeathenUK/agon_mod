@@ -76,6 +76,7 @@ typedef struct {
 	uint8_t new_row;
 	uint8_t sample_total;	
 	bool sample_live[32];
+	uint8_t sample_finetune[32];
 	uint8_t sample_volume[32];	
 	uint8_t sample_channel[32];
 	bool bad_samples;
@@ -752,9 +753,15 @@ void fill_empty(uint8_t rows) {
 
 void dispatch_channel(uint8_t i) {
 
-		if (mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE) {
-			channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+		if (channels_data[i].current_effect == 0x0E) {
+
+			if (channels_data[i].current_effect_param >> 4 == 0x05) {
+
+				channels_data[i].current_period = finetune(channels_data[i].current_period, channels_data[i].current_effect_param & 0x0F);
+				channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
+
+			}
+
 		}
 
 		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
@@ -956,15 +963,11 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		}
 
 		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
-		//hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
 		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
 			channels_data[i].current_effect_param = effect_param;
 		} else channels_data[i].current_effect = 0xFF;
-
-		// Output the decoded note information
-		// Ref: void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency)
 
 		if (sample_number > 0) {
 
@@ -1104,6 +1107,16 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 							else if (param_y == 4) channels_data[i].vibrato_retrigger = false;
 
 						} break;
+
+						case 0x05: {//Override finetune
+
+							if (period) {
+
+								
+
+							}
+
+						} break;						
 
 						case 0x07: {//Set waveform (tremolo)
 
