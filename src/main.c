@@ -549,25 +549,22 @@ bool verbose = true;
 bool extra_verbose = false;
 
 const uint16_t tunings[][36] = {
-	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113},
-	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113},
-	{844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,224,211,199,188,177,167,158,149,141,133,125,118,112},
-	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113},
-	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113},
-	{844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,224,211,199,188,177,167,158,149,141,133,125,118,112},
-	{838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118,111},
-	{832,785,741,699,660,623,588,555,524,495,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,124,117,110},
-	{826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116,109},
-	{820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115,109},
-	{814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,204,192,181,171,161,152,144,136,128,121,114,108},
-	{907,856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120},
-	{900,850,802,757,715,675,636,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,238,225,212,200,189,179,169,159,150,142,134,126,119},
-	{894,844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,223,211,199,188,177,167,158,149,141,133,125,118},
-	{887,838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118},
-	{881,832,785,741,699,660,623,588,555,524,494,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,123,117},
-	{875,826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116},
-	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115},
-	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114},
+	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113}, //0
+	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113}, //1
+	{844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,224,211,199,188,177,167,158,149,141,133,125,118,112}, //2
+	{838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118,111}, //3
+	{832,785,741,699,660,623,588,555,524,495,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,124,117,110}, //4
+	{826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116,109}, //5
+	{820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115,109}, //6
+	{814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,204,192,181,171,161,152,144,136,128,121,114,108}, //7
+	{907,856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120}, //8
+	{900,850,802,757,715,675,636,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,238,225,212,200,189,179,169,159,150,142,134,126,119}, //9
+	{894,844,796,752,709,670,632,597,563,532,502,474,447,422,398,376,355,335,316,298,282,266,251,237,223,211,199,188,177,167,158,149,141,133,125,118}, //A
+	{887,838,791,746,704,665,628,592,559,528,498,470,444,419,395,373,352,332,314,296,280,264,249,235,222,209,198,187,176,166,157,148,140,132,125,118}, //B
+	{881,832,785,741,699,660,623,588,555,524,494,467,441,416,392,370,350,330,312,294,278,262,247,233,220,208,196,185,175,165,156,147,139,131,123,117}, //C
+	{875,826,779,736,694,655,619,584,551,520,491,463,437,413,390,368,347,328,309,292,276,260,245,232,219,206,195,184,174,164,155,146,138,130,123,116}, //D
+	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115}, //E
+	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F
 };
 
 uint16_t finetune(uint16_t period, uint8_t finetune_value) {
@@ -765,7 +762,7 @@ void volume_slide(uint8_t i, uint8_t effect_param) {
 		uint8_t slide_adjusted = (slide_x * 2) - 1;
 		channels_data[i].current_volume += slide_adjusted;
 		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
+		//if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -774,7 +771,7 @@ void volume_slide(uint8_t i, uint8_t effect_param) {
 		uint8_t slide_adjusted = (slide_y * 2) - 1;
 		channels_data[i].current_volume -= slide_adjusted;
 		if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-		if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
+		//if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 	}		
@@ -786,7 +783,7 @@ void fine_volume_slide_up(uint8_t i, uint8_t vol) {
 		uint8_t slide_adjusted = (vol * 2) - 1;
 		channels_data[i].current_volume += slide_adjusted;
 		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
+		//if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
 		set_volume(i, channels_data[i].current_volume);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;	
 
@@ -797,7 +794,7 @@ void fine_volume_slide_down(uint8_t i, uint8_t vol) {
 	uint8_t slide_adjusted = (vol * 2) - 1;
 	channels_data[i].current_volume -= slide_adjusted;
 	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-	if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
+	////if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
 	set_volume(i, channels_data[i].current_volume);
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -807,7 +804,7 @@ void pitch_slide_down(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period);
 	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	////if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
@@ -815,7 +812,7 @@ void pitch_slide_up(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period);
 	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	////if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
@@ -825,7 +822,7 @@ void pitch_slide_directional(uint8_t i) {
 
 		if (channels_data[i].target_period > channels_data[i].current_period) {
 
-			if (extra_verbose) printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			//////if (extra_verbose) printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
 			if (channels_data[i].current_period > channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
 			if (channels_data[i].current_period > 856) channels_data[i].current_period = 856;
@@ -834,7 +831,7 @@ void pitch_slide_directional(uint8_t i) {
 
 		} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
-			if (extra_verbose) printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			//////if (extra_verbose) printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
 			if (channels_data[i].current_period < channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
 			if (channels_data[i].current_period < 113) channels_data[i].current_period = 113;
@@ -860,7 +857,7 @@ void do_vibrato(uint8_t i) {
 	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
 	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
 
-	if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
+	////if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
 	channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
 	if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
@@ -880,7 +877,7 @@ void do_tremulo(uint8_t i) {
 	
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
-	//if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
+	//////if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
 	channels_data[i].tremolo_position += channels_data[i].tremolo_speed;
 	if (channels_data[i].tremolo_position > 31) channels_data[i].tremolo_position -= 64;
@@ -1047,7 +1044,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
 					set_volume(i, channels_data[i].current_volume);
 					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
+					////if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
 
 				} break;				
 
@@ -1083,7 +1080,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 							pitch_slide_down(i, param_y);
 
-						} break;						
+						} break;
 						
 						case 0x04: {//Set waveform (vibrato)
 
@@ -1127,7 +1124,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 					if (channels_data[i].current_effect_param < 0x20) { //<0x20 means speed (i.e. ticks per row)
 
 						mod.current_speed = channels_data[i].current_effect_param;
-						if (extra_verbose) printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
+						////if (extra_verbose) printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
 
 					}
 
@@ -1476,13 +1473,6 @@ int main(int argc, char * argv[])
 	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) {
 		mod.channels = 8; //8 channels
 	}
-	else if (strncmp(mod.header.sig, "28CH", 4) == 0) {
-		mod.channels = 28;//28 channels
-		#ifdef VARIABLE_RATE
-		set_channel_rate(-1, 8192);
-		#endif				
-		 verbose = false;
-	}
 	else {
 
 		handle_exit("Unknown .mod format, only 4 or 8 channel .MODs are supported.", false);
@@ -1519,11 +1509,11 @@ int main(int argc, char * argv[])
 	mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
 	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
 
-	// if (extra_verbose) printf("Module name: %s\r\n", mod.header.name);
-	// if (extra_verbose) printf("Song length: %u\r\n", mod.header.num_orders);
-	// if (extra_verbose) printf("Mod patterns: %u\r\n", mod.pattern_max);
-	// if (extra_verbose) printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
-	// if (extra_verbose) printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
+	// ////if (extra_verbose) printf("Module name: %s\r\n", mod.header.name);
+	// ////if (extra_verbose) printf("Song length: %u\r\n", mod.header.num_orders);
+	// ////if (extra_verbose) printf("Mod patterns: %u\r\n", mod.pattern_max);
+	// ////if (extra_verbose) printf("Module signature: %c%c%c%c (%u channels)\r\n", mod.header.sig[0], mod.header.sig[1], mod.header.sig[2], mod.header.sig[3], mod.channels);
+	// ////if (extra_verbose) printf("Pattern buffer size: %u Bytes\r\n", (mod.pattern_max + 1) * mod.channels * 4 * 64);	
 
 	uint8_t *temp_sample_buffer;
 	mod.sample_total = 0;
