@@ -761,8 +761,9 @@ void dispatch_channel(uint8_t i) {
 
 		if (mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE) {
 			channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
-			channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
 		}
+
+		channels_data[i].current_hz = mod.pd_hz / channels_data[i].current_period;
 
 		if (channels_data[i].current_effect == 0x0E) {
 
@@ -993,8 +994,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			channels_data[i].current_period = period;
 		}
 
-		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
-
 		if (effect_param || effect_number) {
 			channels_data[i].current_effect = effect_number;
 			channels_data[i].current_effect_param = effect_param;
@@ -1006,6 +1005,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				mod.sample_volume[channels_data[i].latched_sample] = 0;
 				mod.sample_channel[channels_data[i].latched_sample] = i;
 			}
+
+			//channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period, mod.header.sample[sample_number - 1].FINE_TUNE) : 0;
+			
 			channels_data[i].latched_sample = sample_number;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
 			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
