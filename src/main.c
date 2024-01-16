@@ -560,8 +560,8 @@ const uint16_t periods[] = {856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 48
 
 const int8_t finetune_offsets[][36] = {
 	//{000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000},
-    {-06,-06,-05,-05,-04,-03,-03,-03,-03,-03,-03,-03,-03,-03,-02,-03,-02,-02,-02,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,000},
-    {-12,-12,-10,-11,-08,-08,-07,-07,-06,-06,-06,-06,-06,-06,-05,-05,-04,-04,-04,-03,-03,-03,-03,-02,-03,-03,-02,-03,-03,-02,-02,-02,-02,-02,-02,-01},
+	{-06,-06,-05,-05,-04,-03,-03,-03,-03,-03,-03,-03,-03,-03,-02,-03,-02,-02,-02,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,000},
+	{-12,-12,-10,-11,-08,-08,-07,-07,-06,-06,-06,-06,-06,-06,-05,-05,-04,-04,-04,-03,-03,-03,-03,-02,-03,-03,-02,-03,-03,-02,-02,-02,-02,-02,-02,-01},
 	{-18,-17,-16,-16,-13,-12,-12,-11,-10,-10,-10,-09,-09,-09,-08,-08,-07,-06,-06,-05,-05,-05,-05,-04,-05,-04,-03,-04,-04,-03,-03,-03,-03,-02,-02,-02},
 	{-24,-23,-21,-21,-18,-17,-16,-15,-14,-13,-13,-12,-12,-12,-11,-10,-09,-08,-08,-07,-07,-07,-07,-06,-06,-06,-05,-05,-05,-04,-04,-04,-04,-03,-03,-03},
 	{-30,-29,-26,-26,-23,-21,-20,-19,-18,-17,-17,-16,-15,-14,-13,-13,-11,-11,-10,-09,-09,-09,-08,-07,-08,-07,-06,-06,-06,-05,-05,-05,-05,-04,-04,-04},
@@ -577,6 +577,18 @@ const int8_t finetune_offsets[][36] = {
 	{006,006,006,005,006,006,006,005,005,005,004,004,003,003,003,003,003,003,003,003,003,002,002,002,002,001,002,001,001,001,001,001,001,001,001,001},
 };
 
+uint16_t clamp_period(uint16_t period) {
+    if (period <= 113) return 113;
+    else if (period >= 856) return 856;
+    else return period;
+}
+
+int16_t clamp_volume(int8_t volume) {
+    if (volume <= 0) return 0;
+    else if (volume >= 127) return 127;
+    else return volume;
+}
+
 uint16_t finetune(uint16_t period, int8_t finetune) {
     size_t periods_count = sizeof(periods) / sizeof(periods[0]);
     size_t finetune_count = sizeof(finetune_values) / sizeof(finetune_values[0]);
@@ -588,7 +600,7 @@ uint16_t finetune(uint16_t period, int8_t finetune) {
     for (size_t i = 0; i < periods_count; ++i) {
         if (periods[i] == period) {
             if (finetune == 0) return period;
-			else return period + finetune_values[finetune][i];
+			else return clamp_period(period + finetune_values[finetune][i]);
         }
     }
 
@@ -681,18 +693,6 @@ void handle_exit(const char* exit_message, bool tidy) {
 
 	if (exit_message != NULL) printf("%s\r\n", exit_message);
 
-}
-
-uint16_t clamp_period(uint16_t period) {
-    if (period <= 113) return 113;
-    else if (period >= 856) return 856;
-    else return period;
-}
-
-int16_t clamp_volume(int8_t volume) {
-    if (volume <= 0) return 0;
-    else if (volume >= 127) return 127;
-    else return volume;
 }
 
 void fill_empty(uint8_t rows) {
@@ -949,7 +949,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 
 		if (effect_number == 0x03 || effect_number == 0x05) {
-			if (period && effect_number == 0x03) channels_data[i].target_period = period;				//Log the note as effect 3/5's target, but don't use it now.
+			if (period && effect_number == 0x03) channels_data[i].target_period = finetune(period, mod.header.sample[sample_number - 1].FINE_TUNE);				//Log the note as effect 3/5's target, but don't use it now.
 			if (effect_param > 0 && effect_number == 0x03) channels_data[i].slide_rate = effect_param;	//If effect 3 has a parameter, use it as slide rate.
 		} else if (period > 0) {
 			channels_data[i].current_period = period;
