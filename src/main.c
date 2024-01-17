@@ -92,6 +92,7 @@ typedef struct {
 	uint8_t current_effect;
 	uint8_t current_effect_param;
 	uint16_t current_period;
+	uint8_t finetune;
 	uint16_t current_hz;
 	uint16_t target_period;
 	uint8_t slide_rate;
@@ -548,6 +549,49 @@ void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_
 bool verbose = true;
 bool extra_verbose = false;
 
+uint8_t index_period(uint16_t period) {
+
+	switch (period) {
+
+		case 856: return 0;
+		case 808: return 1;
+		case 762: return 2;
+		case 720: return 3;
+		case 678: return 4;
+		case 640: return 5;
+		case 604: return 6;
+		case 570: return 7;
+		case 538: return 8;
+		case 508: return 9;
+		case 480: return 10;
+		case 453: return 11;
+		case 428: return 12;
+		case 404: return 13;
+		case 381: return 14;
+		case 360: return 15;
+		case 339: return 16;
+		case 320: return 17;
+		case 302: return 18;
+		case 285: return 19;
+		case 269: return 20;
+		case 254: return 21;
+		case 240: return 22;
+		case 226: return 23;
+		case 214: return 24;
+		case 202: return 25;
+		case 190: return 26;
+		case 180: return 27;
+		case 170: return 28;
+		case 160: return 29;
+		case 151: return 30;
+		case 143: return 31;
+		case 135: return 32;
+		case 127: return 33;
+		case 120: return 34;
+		case 113: return 35;
+	}
+}
+
 const uint16_t tunings[][36] = {
 	{856,808,762,720,678,640,604,570,538,508,480,453,428,404,381,360,339,320,302,285,269,254,240,226,214,202,190,180,170,160,151,143,135,127,120,113}, //0
 	{850,802,757,715,674,637,601,567,535,505,477,450,425,401,379,357,337,318,300,284,268,253,239,225,213,201,189,179,169,159,150,142,134,126,119,113}, //1
@@ -569,6 +613,8 @@ const uint16_t tunings[][36] = {
 
 #define TUNINGS_COUNT (sizeof(tunings) / sizeof(tunings[0]))
 #define DEFAULT_FINETUNE_INDEX 24 // C-3 equivalent index
+
+//round((double)period*pow(FINETUNE_BASE, -(double)finetune))
 
 uint16_t finetune(uint16_t period, uint8_t finetune_val) {
     if (finetune_val == 0) {
