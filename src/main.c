@@ -615,30 +615,30 @@ const uint16_t tunings[][36] = {
 	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F -1
 };
 
-#define TUNINGS_COUNT (sizeof(tunings) / sizeof(tunings[0]))
-#define DEFAULT_FINETUNE_INDEX 24 // C-3 equivalent index
+// #define TUNINGS_COUNT (sizeof(tunings) / sizeof(tunings[0]))
+// #define DEFAULT_FINETUNE_INDEX 24 // C-3 equivalent index
 
-//round((double)period*pow(FINETUNE_BASE, -(double)finetune))
+// //round((double)period*pow(FINETUNE_BASE, -(double)finetune))
 
-uint16_t finetune(uint16_t period, uint8_t finetune_val) {
-    if (finetune_val == 0) {
-        return period; // No finetuning needed
-    }
+// uint16_t finetune(uint16_t period, uint8_t finetune_val) {
+//     if (finetune_val == 0) {
+//         return period; // No finetuning needed
+//     }
 
-    if (finetune_val > 0xF) {
-        //printf("\r\nOut of range finetune, this shouldn't happen\r\n");
-        finetune_val = 0; // Default to finetune 0 if out of range
-    }
+//     if (finetune_val > 0xF) {
+//         //printf("\r\nOut of range finetune, this shouldn't happen\r\n");
+//         finetune_val = 0; // Default to finetune 0 if out of range
+//     }
 
-    for (size_t i = 0; i < TUNINGS_COUNT; i++) {
-        if (tunings[0][i] == period) {
-            return tunings[finetune_val][i];
-        }
-    }
+//     for (size_t i = 0; i < TUNINGS_COUNT; i++) {
+//         if (tunings[0][i] == period) {
+//             return tunings[finetune_val][i];
+//         }
+//     }
 
-    //printf("\r\nPeriod not found, this shouldn't happen in a PT2-compliant MOD, returning default value\r\n");
-    return tunings[finetune_val][DEFAULT_FINETUNE_INDEX];
-}
+//     //printf("\r\nPeriod not found, this shouldn't happen in a PT2-compliant MOD, returning default value\r\n");
+//     return tunings[finetune_val][DEFAULT_FINETUNE_INDEX];
+// }
 
 const char* period_to_note(uint16_t period) {
 
