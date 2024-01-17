@@ -692,13 +692,13 @@ int16_t clamp_volume(int8_t volume) {
 
 void fill_empty(uint8_t rows) {
 			
-	putch(0x1E);
+	putch(0x1E); //Return to top left
 
 	for (uint8_t i = 0; i < rows; i++) {
 		if (mod.channels == 4) {
 			uint8_t c = 9;
 			putch(17);
-			putch(7);
+			putch(7); //White
 			printf("--");
 			putch(17);
 			putch(c++);
@@ -828,7 +828,7 @@ void pitch_slide_directional(uint8_t i) {
 
 		if (channels_data[i].target_period > channels_data[i].current_period) {
 
-			//////if (extra_verbose) printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			//printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
 			if (channels_data[i].current_period > channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
 			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
@@ -836,7 +836,7 @@ void pitch_slide_directional(uint8_t i) {
 
 		} else if (channels_data[i].target_period < channels_data[i].current_period) {
 
-			//////if (extra_verbose) printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			//printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
 			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
 			if (channels_data[i].current_period < channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
 			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
@@ -861,7 +861,7 @@ void do_vibrato(uint8_t i) {
 	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
 	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
 
-	////if (extra_verbose) printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
+	//printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
 	channels_data[i].vibrato_position += channels_data[i].vibrato_speed;
 	if (channels_data[i].vibrato_position > 31) channels_data[i].vibrato_position -= 64;
@@ -881,7 +881,7 @@ void do_tremulo(uint8_t i) {
 	
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
-	//////if (extra_verbose) printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
+	//printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
 	channels_data[i].tremolo_position += channels_data[i].tremolo_speed;
 	if (channels_data[i].tremolo_position > 31) channels_data[i].tremolo_position -= 64;
