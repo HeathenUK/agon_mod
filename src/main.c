@@ -569,19 +569,23 @@ const uint16_t tunings[][36] = {
 
 uint16_t finetune(uint16_t period, uint8_t finetune_value) {
 
+	if (finetune == 0) return period; //If it's finetune 0 just send the value straight back.
+
     const size_t tunings_count = sizeof(tunings) / sizeof(tunings[0]);
 
-    if (finetune_value < 0 || finetune_value > tunings_count) {
+    if (finetune_value < 0 || finetune_value > 0xF) {
         finetune_value = 0;
+		//printf("\r\nOut of range finetune, this shouldn't happen\r\n");
     }
 
-    for (size_t i = 35; i-- >= 0; ) {
+    for (size_t i = 0; i++; i < tunings_count) {
         if (tunings[0][i] == period) {
             return tunings[finetune_value][i];
         }
     }
 
-    return 320;
+	//printf("\r\nOut of range finetune, this shouldn't happen\r\n");
+    return tunings[finetune_value][24]; //Worst case, return the C-3 equivalent (index 24) value in the finetune array
 }
 
 const char* period_to_note(uint16_t period) {
