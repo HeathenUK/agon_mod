@@ -567,25 +567,27 @@ const uint16_t tunings[][36] = {
 	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F -1
 };
 
-uint16_t finetune(uint16_t period, uint8_t finetune_value) {
+#define TUNINGS_COUNT (sizeof(tunings) / sizeof(tunings[0]))
+#define DEFAULT_FINETUNE_INDEX 24 // C-3 equivalent index
 
-	if (finetune == 0) return period; //If it's finetune 0 just send the value straight back.
-
-    const size_t tunings_count = sizeof(tunings) / sizeof(tunings[0]);
-
-    if (finetune_value < 0 || finetune_value > 0xF) {
-        finetune_value = 0;
-		//printf("\r\nOut of range finetune, this shouldn't happen\r\n");
+uint16_t finetune(uint16_t period, uint8_t finetune_val) {
+    if (finetune_val == 0) {
+        return period; // No finetuning needed
     }
 
-    for (size_t i = 0; i++; i < tunings_count) {
+    if (finetune_val > 0xF) {
+        //printf("\r\nOut of range finetune, this shouldn't happen\r\n");
+        finetune_val = 0; // Default to finetune 0 if out of range
+    }
+
+    for (size_t i = 0; i < TUNINGS_COUNT; i++) {
         if (tunings[0][i] == period) {
-            return tunings[finetune_value][i];
+            return tunings[finetune_val][i];
         }
     }
 
-	//printf("\r\nOut of range finetune, this shouldn't happen\r\n");
-    return tunings[finetune_value][24]; //Worst case, return the C-3 equivalent (index 24) value in the finetune array
+    //printf("\r\nPeriod not found, this shouldn't happen in a PT2-compliant MOD, returning default value\r\n");
+    return tunings[finetune_val][DEFAULT_FINETUNE_INDEX];
 }
 
 const char* period_to_note(uint16_t period) {
@@ -747,7 +749,7 @@ void dispatch_channel(uint8_t i) {
 
 		channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
 		
-		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / clamp_period(channels_data[i].current_period) : 0;
+		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
 		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
 		else play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, 0, channels_data[i].current_hz);
@@ -808,7 +810,7 @@ void pitch_slide_down(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period);
 	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	////if (extra_verbose) printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	//printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
@@ -816,7 +818,7 @@ void pitch_slide_up(uint8_t i, uint8_t period) {
 
 	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period);
 	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	////if (extra_verbose) printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	//printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
 
 }
 
