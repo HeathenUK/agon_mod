@@ -550,46 +550,45 @@ bool verbose = true;
 bool extra_verbose = false;
 
 uint8_t index_period(uint16_t period) {
-
-	switch (period) {
-
-		case 856: return 0;
-		case 808: return 1;
-		case 762: return 2;
-		case 720: return 3;
-		case 678: return 4;
-		case 640: return 5;
-		case 604: return 6;
-		case 570: return 7;
-		case 538: return 8;
-		case 508: return 9;
-		case 480: return 10;
-		case 453: return 11;
-		case 428: return 12;
-		case 404: return 13;
-		case 381: return 14;
-		case 360: return 15;
-		case 339: return 16;
-		case 320: return 17;
-		case 302: return 18;
-		case 285: return 19;
-		case 269: return 20;
-		case 254: return 21;
-		case 240: return 22;
-		case 226: return 23;
-		case 214: return 24;
-		case 202: return 25;
-		case 190: return 26;
-		case 180: return 27;
-		case 170: return 28;
-		case 160: return 29;
-		case 151: return 30;
-		case 143: return 31;
-		case 135: return 32;
-		case 127: return 33;
-		case 120: return 34;
-		case 113: return 35;
-	}
+    switch (period) {
+        case 113: return 35;
+        case 120: return 34;
+        case 127: return 33;
+        case 135: return 32;
+        case 143: return 31;
+        case 151: return 30;
+        case 160: return 29;
+        case 170: return 28;
+        case 180: return 27;
+        case 190: return 26;
+        case 202: return 25;
+        case 214: return 24;
+        case 226: return 23;
+        case 240: return 22;
+        case 254: return 21;
+        case 269: return 20;
+        case 285: return 19;
+        case 302: return 18;
+        case 320: return 17;
+        case 339: return 16;
+        case 360: return 15;
+        case 381: return 14;
+        case 404: return 13;
+        case 428: return 12;
+        case 453: return 11;
+        case 480: return 10;
+        case 508: return 9;
+        case 538: return 8;
+        case 570: return 7;
+        case 604: return 6;
+        case 640: return 5;
+        case 678: return 4;
+        case 720: return 3;
+        case 762: return 2;
+        case 808: return 1;
+        case 856: return 0;
+        default: printf("Non-standard period.\r\n");
+    }
 }
 
 const uint16_t tunings[][36] = {
