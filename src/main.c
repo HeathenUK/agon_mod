@@ -91,7 +91,8 @@ typedef struct {
 	int16_t current_volume;
 	uint8_t current_effect;
 	uint8_t current_effect_param;
-	uint16_t current_period;
+	uint16_t base_period;
+	uint16_t tuned_period;
 	uint8_t finetune;
 	uint16_t current_hz;
 	uint16_t target_period;
@@ -796,9 +797,9 @@ void fill_empty(uint8_t rows) {
 
 void dispatch_channel(uint8_t i) {
 
-		//channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+		//channels_data[i].tuned_period = finetune(channels_data[i].tuned_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
 		
-		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
+		channels_data[i].current_hz = channels_data[i].tuned_period > 0 ? mod.pd_hz / channels_data[i].tuned_period : 0;
 
 		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
 		else play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, 0, channels_data[i].current_hz);
@@ -857,17 +858,17 @@ void fine_volume_slide_down(uint8_t i, uint8_t vol) {
 
 void pitch_slide_down(uint8_t i, uint8_t period) {
 
-	channels_data[i].current_period = clamp_period(channels_data[i].current_period + period);
-	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	//printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + period);
+	set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+	//printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].tuned_period, mod.pd_hz / channels_data[i].tuned_period);
 
 }
 
 void pitch_slide_up(uint8_t i, uint8_t period) {
 
-	channels_data[i].current_period = clamp_period(channels_data[i].current_period - period);
-	set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-	//printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].current_period, mod.pd_hz / channels_data[i].current_period);
+	channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period - period);
+	set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+	//printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].tuned_period, mod.pd_hz / channels_data[i].tuned_period);
 
 }
 
@@ -875,23 +876,23 @@ void pitch_slide_directional(uint8_t i) {
 
 	if (channels_data[i].target_period) {
 
-		if (channels_data[i].target_period > channels_data[i].current_period) {
+		if (channels_data[i].target_period > channels_data[i].tuned_period) {
 
-			//printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			channels_data[i].current_period = channels_data[i].current_period + channels_data[i].slide_rate;
-			if (channels_data[i].current_period > channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-			if (channels_data[i].current_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
+			//printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			channels_data[i].tuned_period = channels_data[i].tuned_period + channels_data[i].slide_rate;
+			if (channels_data[i].tuned_period > channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
+			set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+			if (channels_data[i].tuned_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
 
-		} else if (channels_data[i].target_period < channels_data[i].current_period) {
+		} else if (channels_data[i].target_period < channels_data[i].tuned_period) {
 
-			//printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].current_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			channels_data[i].current_period = channels_data[i].current_period - channels_data[i].slide_rate;
-			if (channels_data[i].current_period < channels_data[i].target_period) channels_data[i].current_period = channels_data[i].target_period;
-			set_frequency(i, mod.pd_hz / channels_data[i].current_period);
-			if (channels_data[i].current_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
+			//printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+			channels_data[i].tuned_period = channels_data[i].tuned_period - channels_data[i].slide_rate;
+			if (channels_data[i].tuned_period < channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
+			set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+			if (channels_data[i].tuned_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
 
-		} else if (channels_data[i].target_period == channels_data[i].current_period) {
+		} else if (channels_data[i].target_period == channels_data[i].tuned_period) {
 
 			channels_data[i].target_period = 0;
 
@@ -907,8 +908,8 @@ void do_vibrato(uint8_t i) {
 	delta *= channels_data[i].vibrato_depth;
 	delta >>= 7; //Divide by 128
 
-	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period - delta));
-	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period + delta));					
+	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period - delta));
+	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period + delta));					
 
 	//printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -994,8 +995,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			if (period && effect_number == 0x03) channels_data[i].target_period = tunings[channels_data[i].finetune][index_period(period)];		//Log the note as effect 3/5's target, but don't use it now.
 			if (effect_param > 0 && effect_number == 0x03) channels_data[i].slide_rate = effect_param;	//If effect 3 has a parameter, use it as slide rate.
 		} else if (period > 0) {
-			//channels_data[i].current_period = period;
-			channels_data[i].current_period = tunings[channels_data[i].finetune][index_period(period)];
+			//channels_data[i].tuned_period = period;
+			channels_data[i].base_period = period;
+			channels_data[i].tuned_period = tunings[channels_data[i].finetune][index_period(period)];
 		}
 
 		if (effect_param || effect_number) {
@@ -1267,13 +1269,13 @@ void process_tick() {
 
 					uint8_t r = mod.tick_no % 3;
 					if (r == 0) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period));
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period));
 					}
 					else if (r == 1) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (x * 8));
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (x * 8));
 					}
 					else if (r == 2) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].current_period) + (y * 8));
+						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (y * 8));
 					}
 
 				} break;
