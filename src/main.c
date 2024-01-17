@@ -587,7 +587,11 @@ uint8_t index_period(uint16_t period) {
         case 762: return 2;
         case 808: return 1;
         case 856: return 0;
-        default: printf("Non-standard period.\r\n");
+        default: {
+			printf("Non-standard period.\r\n");
+			return 24; //C-3, to avoid horrible screeching as much as possible.
+			}
+
     }
 }
 
@@ -792,7 +796,7 @@ void fill_empty(uint8_t rows) {
 
 void dispatch_channel(uint8_t i) {
 
-		channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+		//channels_data[i].current_period = finetune(channels_data[i].current_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
 		
 		channels_data[i].current_hz = channels_data[i].current_period > 0 ? mod.pd_hz / channels_data[i].current_period : 0;
 
@@ -986,10 +990,12 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 		period = ((uint16_t)(noteData[0] & 0xF) << 8) | (uint16_t)noteData[1];
 
 		if (effect_number == 0x03 || effect_number == 0x05) {
-			if (period && effect_number == 0x03) channels_data[i].target_period = finetune(period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);				//Log the note as effect 3/5's target, but don't use it now.
+			//if (period && effect_number == 0x03) channels_data[i].target_period = finetune(period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);		//Log the note as effect 3/5's target, but don't use it now.
+			if (period && effect_number == 0x03) channels_data[i].target_period = tunings[channels_data[i].finetune][index_period(period)];		//Log the note as effect 3/5's target, but don't use it now.
 			if (effect_param > 0 && effect_number == 0x03) channels_data[i].slide_rate = effect_param;	//If effect 3 has a parameter, use it as slide rate.
 		} else if (period > 0) {
-			channels_data[i].current_period = period;
+			//channels_data[i].current_period = period;
+			channels_data[i].current_period = tunings[channels_data[i].finetune][index_period(period)];
 		}
 
 		if (effect_param || effect_number) {
@@ -1007,8 +1013,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				mod.sample_channel[channels_data[i].latched_sample] = i;
 			}
 			channels_data[i].latched_sample = sample_number;
+			channels_data[i].finetune = mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
-			channels_data[i].latched_volume = clamp_volume((mod.header.sample[sample_number - 1].VOLUME * 2) - 1);	
+			channels_data[i].latched_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME * 2) - 1);	
 			channels_data[i].current_volume = channels_data[i].latched_volume;
 			set_volume(i, channels_data[i].current_volume);
 
