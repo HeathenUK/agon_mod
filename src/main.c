@@ -588,7 +588,7 @@ uint8_t index_period(uint16_t period) {
         case 808: return 1;
         case 856: return 0;
         default: {
-			printf("Non-standard period.\r\n");
+			printf("\r\nNon-standard period.\r\n");
 			return 24; //C-3, to avoid horrible screeching as much as possible.
 			}
 
