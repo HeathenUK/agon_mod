@@ -10,8 +10,8 @@
 //#define VARIABLE_RATE
 #define VERBOSE
 
-#define CHUNK_SIZE 1024		//Sample upload chunk size in bytes
-#define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
+#define CHUNK_SIZE 256		//Sample upload chunk size in bytes
+#define PD_HZ 200000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
 
 //ez80 defines
@@ -81,6 +81,13 @@ typedef struct {
 	bool bad_samples;
 	uint24_t pd_hz;
 	uint8_t tick_no;
+	
+	uint8_t row_repeat;
+	bool row_repeat_live;
+
+	uint8_t pattern_loop_row;
+	uint8_t pattern_loop_number;
+	bool pattern_loop_live;
 	
 } mod_header;
 
@@ -547,9 +554,6 @@ void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_
 
 }
 
-bool verbose = true;
-bool extra_verbose = false;
-
 uint8_t index_period(uint16_t period) {
     switch (period) {
         case 113: return 35;
@@ -614,31 +618,6 @@ const uint16_t tunings[][36] = {
 	{868,820,774,730,689,651,614,580,547,516,487,460,434,410,387,365,345,325,307,290,274,258,244,230,217,205,193,183,172,163,154,145,137,129,122,115}, //E -2
 	{862,814,768,725,684,646,610,575,543,513,484,457,431,407,384,363,342,323,305,288,272,256,242,228,216,203,192,181,171,161,152,144,136,128,121,114}, //F -1
 };
-
-// #define TUNINGS_COUNT (sizeof(tunings) / sizeof(tunings[0]))
-// #define DEFAULT_FINETUNE_INDEX 24 // C-3 equivalent index
-
-// //round((double)period*pow(FINETUNE_BASE, -(double)finetune))
-
-// uint16_t finetune(uint16_t period, uint8_t finetune_val) {
-//     if (finetune_val == 0) {
-//         return period; // No finetuning needed
-//     }
-
-//     if (finetune_val > 0xF) {
-//         //printf("\r\nOut of range finetune, this shouldn't happen\r\n");
-//         finetune_val = 0; // Default to finetune 0 if out of range
-//     }
-
-//     for (size_t i = 0; i < TUNINGS_COUNT; i++) {
-//         if (tunings[0][i] == period) {
-//             return tunings[finetune_val][i];
-//         }
-//     }
-
-//     //printf("\r\nPeriod not found, this shouldn't happen in a PT2-compliant MOD, returning default value\r\n");
-//     return tunings[finetune_val][DEFAULT_FINETUNE_INDEX];
-// }
 
 const char* period_to_note(uint16_t period) {
 
@@ -789,15 +768,14 @@ void fill_empty(uint8_t rows) {
 			putch(17);
 			putch(18); //Manual fix for colour black
 			printf(" --- --");
-			printf("\r\n");
 		}
 	}
 
 }
 
 void dispatch_channel(uint8_t i) {
-
-		//channels_data[i].tuned_period = finetune(channels_data[i].tuned_period, mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE);
+		
+		if (channels_data[i].current_effect == 0x0E && (channels_data[i].current_effect_param << 4) == 0x0D && mod.tick_no != (channels_data[i].current_effect_param & 0x0F)) return;
 		
 		channels_data[i].current_hz = channels_data[i].tuned_period > 0 ? mod.pd_hz / channels_data[i].tuned_period : 0;
 
@@ -808,95 +786,106 @@ void dispatch_channel(uint8_t i) {
 
 }
 
-void volume_slide(uint8_t i, uint8_t effect_param) {
+void volume_slide(uint8_t i) {
 
-	uint8_t slide_x = effect_param >> 4;
-	uint8_t slide_y = effect_param & 0x0F;
+	if (channels_data[i].current_effect == 0x05 || channels_data[i].current_effect == 0x05 || channels_data[i].current_effect == 0x0A) {
+	
+		uint8_t slide_x = channels_data[i].current_effect_param >> 4;
+		uint8_t slide_y = channels_data[i].current_effect_param & 0x0F;
 
-	if (slide_x) {
+		if (slide_x) {
 
-		uint8_t slide_adjusted = (slide_x * 2) - 1;
-		channels_data[i].current_volume += slide_adjusted;
-		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		//if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, slide_x, slide_adjusted, channels_data[i].current_volume);
-		set_volume(i, channels_data[i].current_volume);
-		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+			uint8_t slide_adjusted = (slide_x * 2) - 1;
+			channels_data[i].current_volume += slide_adjusted;
+			if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+			set_volume(i, channels_data[i].current_volume);
+			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
-	} else if (slide_y) {
+		} else if (slide_y) {
 
-		uint8_t slide_adjusted = (slide_y * 2) - 1;
-		channels_data[i].current_volume -= slide_adjusted;
-		if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-		//if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, slide_y, slide_adjusted, channels_data[i].current_volume);
-		set_volume(i, channels_data[i].current_volume);
-		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-	}		
+			uint8_t slide_adjusted = (slide_y * 2) - 1;
+			channels_data[i].current_volume -= slide_adjusted;
+			if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
+			set_volume(i, channels_data[i].current_volume);
+			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+		}
 
-}
+	} else {
 
-void fine_volume_slide_up(uint8_t i, uint8_t vol) {
+		if ((channels_data[i].current_effect_param >> 4) == 0x0A) {
 
-		uint8_t slide_adjusted = (vol * 2) - 1;
-		channels_data[i].current_volume += slide_adjusted;
-		if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
-		//if (extra_verbose) printf("\r\nSlide tick on %u, increase by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
-		set_volume(i, channels_data[i].current_volume);
-		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;	
+			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F) * 2) - 1;
+			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume + slide_adjusted);
+			set_volume(i, channels_data[i].current_volume);
+			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;	
 
-}
+		} else if ((channels_data[i].current_effect_param >> 4) == 0x0B) {
 
-void fine_volume_slide_down(uint8_t i, uint8_t vol) {
-
-	uint8_t slide_adjusted = (vol * 2) - 1;
-	channels_data[i].current_volume -= slide_adjusted;
-	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-	////if (extra_verbose) printf("\r\nSlide tick on %u, decrease by %u (%u) to %u.", i, vol, slide_adjusted, channels_data[i].current_volume);
-	set_volume(i, channels_data[i].current_volume);
-	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-
-}
-
-void pitch_slide_down(uint8_t i, uint8_t period) {
-
-	channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + period);
-	set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-	//printf("\r\nSlide period down %u to %u (%uHz)", period, channels_data[i].tuned_period, mod.pd_hz / channels_data[i].tuned_period);
-
-}
-
-void pitch_slide_up(uint8_t i, uint8_t period) {
-
-	channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period - period);
-	set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-	//printf("\r\nSlide period up %u to %u (%uHz)", period, channels_data[i].tuned_period, mod.pd_hz / channels_data[i].tuned_period);
-
-}
-
-void pitch_slide_directional(uint8_t i) {
-
-	if (channels_data[i].target_period) {
-
-		if (channels_data[i].target_period > channels_data[i].tuned_period) {
-
-			//printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			channels_data[i].tuned_period = channels_data[i].tuned_period + channels_data[i].slide_rate;
-			if (channels_data[i].tuned_period > channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
-			set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-			if (channels_data[i].tuned_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
-
-		} else if (channels_data[i].target_period < channels_data[i].tuned_period) {
-
-			//printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
-			channels_data[i].tuned_period = channels_data[i].tuned_period - channels_data[i].slide_rate;
-			if (channels_data[i].tuned_period < channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
-			set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-			if (channels_data[i].tuned_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
-
-		} else if (channels_data[i].target_period == channels_data[i].tuned_period) {
-
-			channels_data[i].target_period = 0;
+			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F) * 2) - 1;
+			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume - slide_adjusted);
+			set_volume(i, channels_data[i].current_volume);
+			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 		}
+
+	}
+
+}
+
+void pitch_slide(uint8_t i) {
+
+	if (channels_data[i].current_effect == 0x03 || channels_data[i].current_effect == 0x05) {
+
+		if (channels_data[i].target_period) {
+
+			if (channels_data[i].target_period > channels_data[i].tuned_period) {
+
+				//printf("Sliding period %u up %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+				channels_data[i].tuned_period = channels_data[i].tuned_period + channels_data[i].slide_rate;
+				if (channels_data[i].tuned_period > channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
+				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+				if (channels_data[i].tuned_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
+
+			} else if (channels_data[i].target_period < channels_data[i].tuned_period) {
+
+				//printf("Sliding period %u down %u toward %u on channel %u\r\n", channels_data[i].tuned_period, channels_data[i].slide_rate, channels_data[i].target_period, i);
+				channels_data[i].tuned_period = channels_data[i].tuned_period - channels_data[i].slide_rate;
+				if (channels_data[i].tuned_period < channels_data[i].target_period) channels_data[i].tuned_period = channels_data[i].target_period;
+				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+				if (channels_data[i].tuned_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
+
+			} else if (channels_data[i].target_period == channels_data[i].tuned_period) {
+
+				channels_data[i].target_period = 0;
+
+			}
+
+		}
+
+	} else {
+
+		int16_t magnitude = 0;
+
+		if (channels_data[i].current_effect == 0x01) {
+
+			magnitude = -1 * channels_data[i].current_effect_param;
+
+		} else if ((channels_data[i].current_effect == 0x0E) && channels_data[i].current_effect_param >> 4 == 0x01) {
+
+			magnitude = -1 * channels_data[i].current_effect_param & 0x0F;
+
+		} else if (channels_data[i].current_effect == 0x02) {
+
+			magnitude = channels_data[i].current_effect_param;
+
+		} else if ((channels_data[i].current_effect == 0x0E) && channels_data[i].current_effect_param >> 4 == 0x02) {
+
+			magnitude = channels_data[i].current_effect_param & 0x0F;	
+
+		}
+
+		channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + magnitude);
+		set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);	
 
 	}
 
@@ -1077,14 +1066,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				} break;					
 
 				case 0x0B: {//Skip to order xx
-
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
-					
-					uint8_t new_order = (param_x * 16) + param_y;
-
+			
 					if (mod.order_break_pending == false) {
-						mod.new_order = new_order;
+						mod.new_order = channels_data[i].current_effect_param;
 						mod.order_break_pending = true;
 					} 
 
@@ -1092,17 +1076,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 				case 0x0C: {//Set channel volume to xx
 
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
-
-					uint8_t new_vol = (param_x * 16) + param_y;
-
-					channels_data[i].current_volume = (new_vol * 2) - 1;
-					if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-					else if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+					channels_data[i].current_volume = clamp_volume((channels_data[i].current_effect_param * 2) - 1);
 					set_volume(i, channels_data[i].current_volume);
 					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
-					////if (extra_verbose) printf("\r\nSetting channel %u volume to %u (%u).", i, channels_data[i].current_effect_param, channels_data[i].current_volume);
 
 				} break;				
 
@@ -1130,13 +1106,12 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						case 0x01: {
 
-							pitch_slide_up(i, param_y);
-
+							pitch_slide(i);							
 						} break;
 
 						case 0x02: {
 
-							pitch_slide_down(i, param_y);
+							pitch_slide(i);
 
 						} break;
 						
@@ -1147,6 +1122,40 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						} break;
 
+						// case 0x06: {//Pattern return to set point
+
+						// 	if (param_y == 0) { //E60 - Log this row as the one to come back to
+
+						// 		mod.pattern_loop_row = mod.current_row - 1;
+								
+						// 	} else { //E6X - Repeat the logged row X times
+
+						// 		if (mod.pattern_loop_live) {
+
+						// 			printf("\r\nLoop %u\r\n", mod.pattern_loop_number);
+
+						// 			if (mod.pattern_loop_number == 0) {
+						// 				mod.pattern_loop_live = false;
+						// 				mod.current_row++;
+						// 				printf("\r\nI should be done\r\n");
+						// 			} else {
+						// 				mod.current_row = mod.pattern_loop_row;
+						// 				mod.pattern_loop_number--;
+						// 			}
+									
+						// 		} else {
+
+						// 			printf("\r\nLooping %u times back to row %u\r\n", param_y, mod.pattern_loop_row);
+						// 			mod.pattern_loop_live = true;
+						// 			mod.pattern_loop_number = param_y - 1;
+						// 			mod.current_row = mod.pattern_loop_row;
+
+						// 		}
+
+						// 	}
+
+						// } break;						
+
 						case 0x07: {//Set waveform (tremolo)
 
 							if (param_y == 0) channels_data[i].tremolo_retrigger = true;
@@ -1156,21 +1165,37 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						case 0x0A: {
 
-							fine_volume_slide_up(i, param_y);
+							volume_slide(i);
 
 						} break;
 
 						case 0x0B: {
 
-							fine_volume_slide_down(i, param_y);
+							volume_slide(i);
 
 						} break;										
 						
 						case 0x0D: {//Delay sample change
 
-							//TODO
+							dispatch_channel(i);
 
-						} break;										
+						} break;		
+
+						case 0x0E: {//Repeat row
+
+							if (mod.row_repeat_live == true) {
+								if (mod.row_repeat == 0) mod.row_repeat_live = false;
+								else {
+									mod.row_repeat--;
+									mod.current_row--;
+								}
+							} else {
+								mod.current_row--;
+								mod.row_repeat = param_y - 1;
+								mod.row_repeat_live = true;
+							}
+
+						} break;														
 
 					}
 
@@ -1182,7 +1207,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 					if (channels_data[i].current_effect_param < 0x20) { //<0x20 means speed (i.e. ticks per row)
 
 						mod.current_speed = channels_data[i].current_effect_param;
-						////if (extra_verbose) printf("\r\nTempo set to %u.", channels_data[i].current_effect_param);
 
 					}
 
@@ -1282,19 +1306,22 @@ void process_tick() {
 
 				case 0x01: { //Pitch slide (porta) up
 
-					pitch_slide_up(i, channels_data[i].current_effect_param);
+					//pitch_slide_up(i, channels_data[i].current_effect_param);
+					pitch_slide(i);
 
 				} break;
 
 				case 0x02: { //Pitch slide (porta) down	
 					
-					pitch_slide_down(i, channels_data[i].current_effect_param);
+					//pitch_slide_down(i, channels_data[i].current_effect_param);
+					pitch_slide(i);
 
 				} break;
 
 				case 0x03: { //Pitch slide toward target note (tone portamento)
 
-					pitch_slide_directional(i);
+					//pitch_slide_directional(i);
+					pitch_slide(i);
 
 				} break;				
 
@@ -1306,15 +1333,18 @@ void process_tick() {
 
 				case 0x05: {//Volume Slide + Tone Portamento
 					
-					volume_slide(i, channels_data[i].current_effect_param);
+					//volume_slide(i, channels_data[i].current_effect_param);
+					volume_slide(i);
 
-					pitch_slide_directional(i);
+					//pitch_slide_directional(i);
+					pitch_slide(i);
 
 				} break;	
 
 				case 0x06: {//Volume Slide + Vibrato
 
-					volume_slide(i, channels_data[i].current_effect_param);					
+					//volume_slide(i, channels_data[i].current_effect_param);					
+					volume_slide(i);
 
 					do_vibrato(i);
 
@@ -1328,9 +1358,44 @@ void process_tick() {
 
 				case 0x0A: { //Volume slide
 
-					volume_slide(i, channels_data[i].current_effect_param);
+					//volume_slide(i, channels_data[i].current_effect_param);
+					volume_slide(i);
 
 				} break;
+
+				case 0x0E: { //Extended effects
+
+					uint8_t param_x = channels_data[i].current_effect_param >> 4;
+					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+
+					switch (param_x) {
+
+						case 0x09: { //Retrigger
+
+							if (mod.tick_no % param_y == 0) dispatch_channel(i);
+			
+						} break;
+						
+						case 0x0C: { //Cut volume on tick y
+
+							if (mod.tick_no == param_y) {
+								
+								channels_data[i].current_volume = 0;
+								set_volume(i, channels_data[i].current_volume);
+
+							}
+			
+						} break;
+
+						case 0x0D: { //Delayed dispatch
+
+
+			
+						} break;
+
+					}
+
+				} break;				
 
 				default:
 					break;
@@ -1341,20 +1406,6 @@ void process_tick() {
 
 	}
 
-}
-
-void delay_cents(uint16_t ticks_end) { //100ms ticks
-	
-	uint16_t ticks = 0;
-	ticks_end *= 6;
-	while(true) {
-		
-		waitvblank();
-		ticks++;
-		if(ticks >= ticks_end) break;
-		
-	}
-	
 }
 
 void header_line() {
@@ -1472,9 +1523,6 @@ void draw_sample_bars() {
 
 int main(int argc, char * argv[])
 {
-
-	verbose = true;
-	extra_verbose = false;
 	
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
@@ -1541,15 +1589,17 @@ int main(int argc, char * argv[])
 	channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
 	for (uint8_t i = 0; i < mod.channels; i++) {
 		enable_channel(i);
-		channels_data[i].latched_sample = 0;
+		reset_channel(i);
+		//channels_data[i].latched_sample = 0;
 		channels_data[i].latched_volume = 0;
+		channels_data[i].current_volume = 0;
 		channels_data[i].current_effect = 0xFF;
-		channels_data[i].current_effect_param = 0;
+		//channels_data[i].current_effect_param = 0;
 		channels_data[i].vibrato_retrigger = true;
 		channels_data[i].tremolo_retrigger = true;		
 		
 	}
-	mod.pattern_max = 0;
+	//mod.pattern_max = 0;
 	mod.current_speed = 6;
 	mod.current_bpm = 125;
 
@@ -1568,7 +1618,7 @@ int main(int argc, char * argv[])
 	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
 
 	uint8_t *temp_sample_buffer;
-	mod.sample_total = 0;
+	//mod.sample_total = 0;
 	
 	for (uint8_t i = 1; i < 31; i++) {
 
@@ -1644,12 +1694,12 @@ int main(int argc, char * argv[])
 
 	}
 
-	mod.sample_live[0] = false; //No sample #0
+	//mod.sample_live[0] = false; //No sample #0
 
 	free(temp_sample_buffer);
 	
 	//timer_begin(TIMER_NO, 23040, 16); //0.02 seconds
-	mod.current_order = 0, mod.current_row = 0;
+	//mod.current_order = 0, mod.current_row = 0;
 	uint24_t old_ticker = ticker;
 	uint16_t old_key_count = sv->vkeycount;
 	
@@ -1754,9 +1804,6 @@ int main(int argc, char * argv[])
 				mod.order_break_pending = false;
 				mod.pattern_break_pending = false;
 				
-				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				//header_line();
-
 			} else if (mod.order_break_pending) { //Just an order break (0x0B)
 
 				mod.current_order = mod.new_order;
