@@ -9,11 +9,11 @@
 
 //Settings
 
-#define VARIABLE_RATE //Enables variable system sample rate setting based on channel count - does not work reliably on < C8 2.5.0
+//#define VARIABLE_RATE //Enables variable system sample rate setting based on channel count - does not work reliably on < C8 2.5.0
 #define VERBOSE //Enables visual output, otherwise compiles to play "headless"
 
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
-#define PD_HZ 195000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
+#define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
 
 #define AMIGA_PERIOD_MAX 907		//Amiga period clamp maximum (finetune 0 = 856)
@@ -122,10 +122,6 @@ typedef struct {
 	uint8_t row_repeat;
 	bool row_repeat_live;
 
-	uint8_t loop_row;
-	bool	loop_live;
-	uint8_t loop_count;
-	
 } mod_header;
 
 typedef struct {
@@ -150,6 +146,10 @@ typedef struct {
 	int8_t tremolo_position;
 	uint8_t tremolo_speed;
 	uint8_t tremolo_depth;		
+
+	uint8_t loop_row;
+	bool	loop_live;
+	uint8_t loop_count;	
 
 } channel_data;
 
@@ -395,6 +395,11 @@ void set_volume(uint8_t channel, uint8_t volume) {
 void set_frequency(uint8_t channel, uint16_t frequency) {
 
 	//VDU 23, 0, &85, channel, 3, frequency;
+
+	//Shouldn't be necessary given period clamp, but belt and braces.
+
+	if (frequency > 2100) frequency = 2100;
+	else if (frequency < 50) frequency = 50;
 
 	putch(23);
 	putch(0);
@@ -723,7 +728,7 @@ const char* period_to_note(uint16_t period) {
 void handle_exit(const char* exit_message, bool tidy) {
 
 	if (mod.channels) for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
-	//for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
+	for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
 
 	if (channels_data != NULL) free(channels_data);
 
@@ -1163,27 +1168,27 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 						case EXT_LOOP: {//Set waveform (tremolo)
 
 							if (param_y == 0) {
-								mod.loop_row = mod.current_row - 1;
+								channels_data[i].loop_row = mod.current_row - 1;
 								//printf("\r\nLogged row %u as the start of a future loop\r\n", mod.loop_row);
 							}
 
 							else {
 
-								if (!mod.loop_live) {
+								if (!channels_data[i].loop_live) {
 									
-									mod.loop_count = param_y;
-									mod.loop_live = true;
-									mod.current_row = mod.loop_row;
+									channels_data[i].loop_count = param_y - 1;
+									channels_data[i].loop_live = true;
+									mod.current_row = channels_data[i].loop_row;
 
 								} else {
 
-									mod.loop_count--;
+									channels_data[i].loop_count--;
 
-									if (mod.loop_count == 0) {
+									if (channels_data[i].loop_count == 0) {
 										
-										mod.loop_live = false;
+										channels_data[i].loop_live = false;
 
-									} else mod.current_row = mod.loop_row;
+									} else mod.current_row = channels_data[i].loop_row;
 
 								}
 
@@ -1243,7 +1248,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						mod.current_bpm = channels_data[i].current_effect_param;
 						timer_end(TIMER_NO);
-						timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
+						timer_begin(TIMER_NO, (rr_array[mod.current_bpm - 0x20] / 10) * 9, div_array[mod.current_bpm - 0x20]);
 
 					}
 
@@ -1734,7 +1739,7 @@ int main(int argc, char * argv[])
 				set_sample_loop_start(i, sample_loop_start_swapped * 2);
 				set_sample_loop_length(i, sample_loop_length_swapped * 2);
 
-			} //else set_sample_loop_length(i, sample_loop_length_swapped * 2);
+			}
 
 			printf("%02u..", i);
 
@@ -1792,7 +1797,6 @@ int main(int argc, char * argv[])
 		}
 
 		set_graphics_foreground(7);
-		//draw_rect(8,180,152,230); //Volume background
 		draw_rect(8,198,152,230); //Volume background
 		
 		set_text_window(20,2,80,1);
@@ -1863,17 +1867,11 @@ int main(int argc, char * argv[])
 				mod.current_row = 0;
 				mod.order_break_pending = false;
 
-				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				//header_line();
-
 			} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
 
 				mod.current_order++;
 				mod.current_row = mod.new_row;
 				mod.pattern_break_pending = false;
-
-				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				//header_line();
 
 			}			
 
