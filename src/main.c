@@ -10,14 +10,18 @@
 //Settings
 
 //#define VARIABLE_RATE //Enables variable system sample rate setting based on channel count - does not work reliably on < C8 2.5.0
+#define RATE_4_CHAN 32768
+#define RATE_6_CHAN 24576
+#define RATE_8_CHAN 8192
+
 #define VERBOSE //Enables visual output, otherwise compiles to play "headless"
 
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
-#define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
+#define PD_HZ 223000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
 
-#define AMIGA_PERIOD_MAX 907		//Amiga period clamp maximum (finetune 0 = 856)
-#define AMIGA_PERIOD_MIN 108		//Amiga period clamp minimum (finetune 0 = 113)
+#define AMIGA_PERIOD_MAX 910		//Amiga period clamp maximum (finetune 0 = 856)
+#define AMIGA_PERIOD_MIN 109		//Amiga period clamp minimum (finetune 0 = 113)
 
 //MOD defines
 
@@ -652,7 +656,7 @@ uint8_t index_period(uint16_t period) {
         case 808: return 1;
         case 856: return 0;
         default: {
-			printf("\r\nNon-standard period.\r\n");
+			printf("\r\nNon-standard period %u.\r\n", period);
 			return 24; //C-3, to avoid horrible screeching as much as possible.
 			}
 
@@ -1608,23 +1612,26 @@ int main(int argc, char * argv[])
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) {
 		mod.channels = 4; //Classic 4 channels
 		#ifdef VARIABLE_RATE
-		set_channel_rate(-1, 32768);
+		set_channel_rate(-1, RATE_4_CHAN);
 		#endif
 	}
 	else if (strncmp(mod.header.sig, "FLT4", 4) == 0) {
 		mod.channels = 4; //Startrekker 4 channels
 		#ifdef VARIABLE_RATE
-		set_channel_rate(-1, 32768);
+		set_channel_rate(-1, RATE_4_CHAN);
 		#endif		
 	}
 	else if (strncmp(mod.header.sig, "6CHN", 4) == 0) {
 		mod.channels = 6; //6 channels
 		#ifdef VARIABLE_RATE
-		set_channel_rate(-1, 24576);
+		set_channel_rate(-1, RATE_6_CHAN);
 		#endif		
 	}
 	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) {
 		mod.channels = 8; //8 channels
+		#ifdef VARIABLE_RATE
+		set_channel_rate(-1, RATE_8_CHAN);
+		#endif				
 	}
 	else {
 
