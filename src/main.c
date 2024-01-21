@@ -205,6 +205,21 @@ void set_port(uint8_t port, uint8_t value) {
     );
 }
 
+void print_to_debug(const char* format, ...) {
+
+	va_list args;
+	putch(2);
+	putch(21);
+	
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+
+	putch(6);
+	putch(3);
+
+}
+
 void timer_begin(uint8_t timer_no, uint16_t reload_value, uint16_t clk_divider) {
 
 	//timer period (in SECONDS) = (reload_value * clk_divider) / system_clock_frequency (which is 18432000 Hz)
@@ -656,7 +671,7 @@ uint8_t index_period(uint16_t period) {
         case 808: return 1;
         case 856: return 0;
         default: {
-			printf("\r\nNon-standard period %u.\r\n", period);
+			print_to_debug("\r\nNon-standard period %u.\r\n", period);
 			return 24; //C-3, to avoid horrible screeching as much as possible.
 			}
 
@@ -1587,9 +1602,11 @@ void draw_sample_bars() {
 
 int main(int argc, char * argv[])       
 {
-	
+
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
+
+	print_to_debug("\r\nDebug starting.\r\n");
 
 	if (argc < 2) {
 		handle_exit("Usage is playmod <file> [alternative magic number]", false);
@@ -1604,7 +1621,7 @@ int main(int argc, char * argv[])
         handle_exit("Could not open file.", false);
 		return 0;
     }
-
+	
 	printf("Reading .MOD header\r\n");
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
@@ -1676,7 +1693,7 @@ int main(int argc, char * argv[])
 	uint8_t *temp_sample_buffer;
 	//mod.sample_total = 0;
 	
-	printf("Uploading sample data...\r\n");
+	printf("Uploading sample data...");
 
 	for (uint8_t i = 1; i < 31; i++) {
 
