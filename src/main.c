@@ -15,6 +15,7 @@
 #define RATE_8_CHAN 8192
 
 #define VERBOSE //Enables visual output, otherwise compiles to play "headless"
+//#define PRINT_DEBUG //Enables debug output to "printer" requiring C8 firmware 2.5.0+
 
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
 #define PD_HZ 223000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
@@ -860,7 +861,9 @@ uint8_t index_period(uint16_t period) {
         case 808: return 1;
         case 856: return 0;
         default: {
+			#ifdef PRINT_DEBUG
 			print_to_debug("\r\nNon-standard period %u.\r\n", period);
+			#endif
 			return 24; //C-3, to avoid horrible screeching as much as possible.
 			}
 
@@ -1860,7 +1863,9 @@ int main(int argc, char * argv[])
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
 
+	#ifdef PRINT_DEBUG
 	print_to_debug("\r\nDebug starting.\r\n");
+	#endif
 
 	if (argc < 2) {
 		handle_exit("Usage is playmod <file> [alternative magic number]", false);
