@@ -19,9 +19,10 @@
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
 #define PD_HZ 223000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
+#define MAX_CHANNELS 8
 
-#define AMIGA_PERIOD_MAX 910		//Amiga period clamp maximum (finetune 0 = 856)
-#define AMIGA_PERIOD_MIN 109		//Amiga period clamp minimum (finetune 0 = 113)
+#define AMIGA_PERIOD_MAX 856		//Amiga period clamp maximum (finetune 0 = 856)
+#define AMIGA_PERIOD_MIN 113		//Amiga period clamp minimum (finetune 0 = 113)
 
 //MOD defines
 
@@ -73,6 +74,8 @@ extern void timer_handler_2();
 extern void timer_handler_3();
 extern void timer_handler_4();
 extern void timer_handler_5();
+
+extern void uart0_fast_write(char *data, uint24_t length);
 
 #pragma pack(push, 1)
 
@@ -126,12 +129,14 @@ typedef struct {
 	uint8_t row_repeat;
 	bool row_repeat_live;
 
+	bool channel_disabled[MAX_CHANNELS];
+
 } mod_header;
 
 typedef struct {
 
 	uint16_t latched_sample;
-	int16_t latched_volume;
+	//int16_t latched_volume;
 	int16_t current_volume;
 	uint8_t current_effect;
 	uint8_t current_effect_param;
@@ -262,7 +267,7 @@ void timer_end(uint8_t timer_no) {
 
 }
 
-int test_bit(int num, int pos) {
+bool test_bit(int num, int pos) {
     return (num & (1 << pos)) != 0;
 }
 
@@ -310,274 +315,230 @@ void write24bit(uint24_t w)
     putch(w >> 16);	 // write MSB	
 }
 
-void clear_assets() {
+// void clear_assets() {
 
-	//VDU 23, 27, 16
+// 	//VDU 23, 27, 16
 
-	putch(23);
-	putch(27);
-	putch(16);
+// 	putch(23);
+// 	putch(27);
+// 	putch(16);
 
+// }
+
+static inline void clear_assets() {
+    char buffer[3] = {23, 27, 16};
+    mos_puts(buffer, 3, 0);
 }
 
-void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {	
+// void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {	
 
-	putch(23);
-	putch(0);
-	putch(0xA0);
-	write16bit(buffer_id);
-	putch(0);
-	write16bit(buffer_size);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0xA0);
+// 	write16bit(buffer_id);
+// 	putch(0);
+// 	write16bit(buffer_size);
 	
+//     mos_puts(buffer_content, buffer_size, 0);
+
+// }
+
+static inline void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {
+    char buffer[8] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 0, buffer_size & 0xFF, buffer_size >> 8};
+    mos_puts(buffer, 8, 0);
     mos_puts(buffer_content, buffer_size, 0);
-
 }
 
-void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
+// void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
 
-	putch(23);
-	putch(0);
-	putch(0x85);	
-	putch(0);
-	putch(5);
-	putch(2);
-	write16bit(buffer_id);
-	putch(format);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);	
+// 	putch(0);
+// 	putch(5);
+// 	putch(2);
+// 	write16bit(buffer_id);
+// 	putch(format);
 
+// }
+
+static inline void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
+    char buffer[9] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, format};
+    mos_puts(buffer, 9, 0);
 }
 
-void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
 
-	putch(23);
-	putch(0);
-	putch(0x85);	
-	putch(0); //Ignored
-	putch(5);
-	putch(2);
-	write16bit(buffer_id);
-	putch(24);
-	write16bit(frequency);
+// void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
 
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);	
+// 	putch(0); //Ignored
+// 	putch(5);
+// 	putch(2);
+// 	write16bit(buffer_id);
+// 	putch(24);
+// 	write16bit(frequency);
+
+// }
+
+static inline void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
+    char buffer[11] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, 24, frequency & 0xFF, frequency >> 8};
+    mos_puts(buffer, 11, 0);
 }
 
-void enable_channel(uint8_t channel) {
+// void enable_channel(uint8_t channel) {
 
-	//VDU 23, 0, &85, channel, 8
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(8);
+// 	//VDU 23, 0, &85, channel, 8
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(8);
 
+// }
+
+static inline void enable_channel(uint8_t channel) {
+    char buffer[5] = {23, 0, 0x85, channel, 8};
+    mos_puts(buffer, 5, 0);
 }
 
-void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
+
+// void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
 	
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel_id);
-	putch(4);
-	putch(8);
-	write16bit(sample_id);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel_id);
+// 	putch(4);
+// 	putch(8);
+// 	write16bit(sample_id);
 	
+// }
+
+static inline void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
+    char buffer[8] = {23, 0, 0x85, channel_id, 4, 8, sample_id & 0xFF, sample_id >> 8};
+    mos_puts(buffer, 8, 0);
 }
 
-void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
+// void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
 
-	assign_sample_to_channel(sample_id, channel);
+// 	assign_sample_to_channel(sample_id, channel);
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(0);
-	putch(volume);
-	write16bit(frequency);
-	write16bit(duration);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(0);
+// 	putch(volume);
+// 	write16bit(frequency);
+// 	write16bit(duration);
 
+// }
+
+static inline void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
+    assign_sample_to_channel(sample_id, channel);
+    char buffer[10] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, duration >> 8};
+    mos_puts(buffer, 10, 0);
 }
 
-void set_volume(uint8_t channel, uint8_t volume) {
 
-	//VDU 23, 0, &85, channel, 2, volume
+// void set_volume(uint8_t channel, uint8_t volume) {
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(2);
-	putch(volume);
+// 	//VDU 23, 0, &85, channel, 2, volume
 
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(2);
+// 	putch(volume);
+
+// }
+
+static inline void set_volume(uint8_t channel, uint8_t volume) {
+    char buffer[6] = {23, 0, 0x85, channel, 2, volume};
+    mos_puts(buffer, 6, 0);
 }
 
-void set_frequency(uint8_t channel, uint16_t frequency) {
 
-	//VDU 23, 0, &85, channel, 3, frequency;
+// void set_frequency(uint8_t channel, uint16_t frequency) {
 
-	//Shouldn't be necessary given period clamp, but belt and braces.
+// 	//VDU 23, 0, &85, channel, 3, frequency;
 
-	if (frequency > 2100) frequency = 2100;
-	else if (frequency < 50) frequency = 50;
+// 	//Shouldn't be necessary given period clamp, but belt and braces.
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(3);
-	write16bit(frequency);
+// 	if (frequency > 2100) frequency = 2100;
+// 	else if (frequency < 50) frequency = 50;
 
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(3);
+// 	write16bit(frequency);
+
+// }
+
+static inline void set_frequency(uint8_t channel, uint16_t frequency) {
+    if (frequency > 2100) frequency = 2100;
+    else if (frequency < 50) frequency = 50;
+
+    char buffer[7] = {23, 0, 0x85, channel, 3, frequency & 0xFF, frequency >> 8};
+    mos_puts(buffer, 7, 0);
 }
 
-void set_position(uint8_t channel, uint24_t position) {
 
-	//VDU 23, 0, &85, channel, 11, position; positionHighByte
+// void set_position(uint8_t channel, uint24_t position) {
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(11);
-	write24bit(position);
+// 	//VDU 23, 0, &85, channel, 11, position; positionHighByte
 
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(11);
+// 	write24bit(position);
+
+// }
+
+static inline void set_position(uint8_t channel, uint24_t position) {
+    char buffer[8] = {23, 0, 0x85, channel, 11, position & 0xFF, (position >> 8) & 0xFF, position >> 16};
+    mos_puts(buffer, 8, 0);
 }
 
-void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
+// void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(0);
-	putch(volume);
-	write16bit(frequency);
-	write16bit(duration);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(0);
+// 	putch(volume);
+// 	write16bit(frequency);
+// 	write16bit(duration);
 
+// }
+
+static inline void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
+    char buffer[11] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
+    mos_puts(buffer, 11, 0);
 }
 
-void vdu_move(uint16_t x, uint16_t y) {
+// void vdu_move(uint16_t x, uint16_t y) {
 
-	putch(25);
-	putch(4);
-	write16bit(x);
-	write16bit(y);
+// 	putch(25);
+// 	putch(4);
+// 	write16bit(x);
+// 	write16bit(y);
 
+// }
+
+static inline void vdu_move(uint16_t x, uint16_t y) {
+    char buffer[6] = {25, 4, x & 0xFF, x >> 8, y & 0xFF, y >> 8};
+    mos_puts(buffer, 6, 0);
 }
 
-void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
-
-	//MOVE x1,y1:MOVE x1+w,y1+h:PLOT 189,x2,y2
-	//PLOT = VDU 25,k,x;y;
-	//MOVE = VDU 25 4 x; y;
-
-	putch(25);
-	putch(4);
-	write16bit(x1);
-	write16bit(y1);
-
-	putch(25);
-	putch(101);
-	write16bit(x2);
-	write16bit(y2);	
-
-}
-
-void plot_point(uint16_t x1, uint16_t y1) {
-
-	//PLOT 69,x,y
-
-	putch(25);
-	putch(69);
-	write16bit(x1);
-	write16bit(y1);
-
-}
-
-void clear_buffer(uint16_t buffer_id) {
-	
-	putch(23);
-	putch(0);
-	putch(0xA0);
-	write16bit(buffer_id);
-	putch(2);
-	
-}
-
-void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
-	
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(0); //Ignored channel
-	putch(5);
-	putch(4);
-	write16bit(buffer_id);
-	write16bit(frequency);
-	
-}
-
-void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
-	
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(13);
-	write16bit(sample_rate);
-	
-}
-
-void reset_channel(uint8_t channel) {
-	
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(10);
-	
-}
-
-void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
-	
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(channel);
-	putch(12);
-	write24bit(duration);
-	
-}
-
-void wait_tick(uint16_t ticks) {
-
-	while((ticker + ticks) < ticker) {}
-
-}
-
-void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
-
-	//VDU 23, 0, &85, channel, 5, 6, bufferId; repeatStart; repeatStartHighByte
-
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(0);
-	putch(5);
-	putch(6);
-	write16bit(sample_id);
-	write24bit(start);
-
-}
-
-void switch_buffers() {
-
-	//VDU 23, 0, &C3
-
-	putch(23);
-	putch(0);
-	putch(0xC3);
-
-}
 
 void set_graphics_foreground(uint8_t colour) {
 
@@ -587,49 +548,282 @@ void set_graphics_foreground(uint8_t colour) {
 
 }
 
-void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+// void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
 
-	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
+// 	//MOVE x1,y1:MOVE x1+w,y1+h:PLOT 189,x2,y2
+// 	//PLOT = VDU 25,k,x;y;
+// 	//MOVE = VDU 25 4 x; y;
 
-	putch(23);
-	putch(0);
-	putch(0x85);
-	putch(0);
-	putch(5);
-	putch(8);
-	write16bit(sample_id);
-	write24bit(length);
+// 	putch(25);
+// 	putch(4);
+// 	write16bit(x1);
+// 	write16bit(y1);
+
+// 	putch(25);
+// 	putch(101);
+// 	write16bit(x2);
+// 	write16bit(y2);	
+
+// }
+
+static inline void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
+    char buffer[12] = {25, 4, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8, 25, 101, x2 & 0xFF, x2 >> 8, y2 & 0xFF, y2 >> 8};
+    mos_puts(buffer, 12, 0);
+}
+
+
+void rect_drop_shadow(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t gap_bottom, uint8_t gap_right, uint8_t fg, uint8_t bg) {
+
+	set_graphics_foreground(bg);
+	draw_rect(x1 + gap_right,y1 + gap_bottom,x2 + gap_right, y2 + gap_bottom);
+	set_graphics_foreground(fg);
+	draw_rect(x1, y1, x2, y2);
 
 }
 
-void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+void draw_progress_bar(int total, int progress, int maxBarLength, int upperX, int upperY, int barHeight, uint8_t bg, uint8_t fg) {
+    if (total <= 0) {
+        return;
+    }
 
-	putch(0x1C);
+    if (progress < 0 || progress > total) {
+        return;
+    }
 
-	putch(left);
-	putch(bottom);
-	putch(right);
-	putch(top);
+    int segmentWidth = 10; // Fixed width of each segment
+    int gap = 4; // Gap between segments
+
+    // Calculate the maximum number of segments that can fit within the maxBarLength
+    int maxSegments = (maxBarLength + gap) / (segmentWidth + gap);
+
+    // Calculate the actual number of segments based on total
+    int actualSegments = (total < maxSegments) ? total : maxSegments;
+
+    // Recalculate the actual bar length considering the number of segments and gaps
+    int actualBarLength = actualSegments * (segmentWidth + gap) - gap;
+
+    // Calculate the number of filled segments based on progress
+    int filledSegments = (progress * actualSegments) / total;
+
+	set_graphics_foreground(bg);
+
+	draw_rect(upperX - gap, upperY - (gap / 2), upperX + actualBarLength + gap, upperY + barHeight + (gap / 2));
+
+	set_graphics_foreground(fg);
+
+    for (int i = 0; i < filledSegments; ++i) {
+        int x1 = upperX + i * (segmentWidth + gap); // Starting x-coordinate of each segment
+        int y1 = upperY; // Top y-coordinate (upperY)
+        int x2 = x1 + segmentWidth; // Ending x-coordinate of each segment
+        int y2 = upperY + barHeight; // Bottom y-coordinate
+
+        draw_rect(x1, y1, x2, y2);
+    }
+}
+
+// void plot_point(uint16_t x1, uint16_t y1) {
+
+// 	//PLOT 69,x,y
+
+// 	putch(25);
+// 	putch(69);
+// 	write16bit(x1);
+// 	write16bit(y1);
+
+// }
+
+static inline void plot_point(uint16_t x1, uint16_t y1) {
+    char buffer[6] = {25, 69, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8};
+    mos_puts(buffer, 6, 0);
+}
+
+// void clear_buffer(uint16_t buffer_id) {
+	
+// 	putch(23);
+// 	putch(0);
+// 	putch(0xA0);
+// 	write16bit(buffer_id);
+// 	putch(2);
+	
+// }
+
+static inline void clear_buffer(uint16_t buffer_id) {
+    char buffer[6] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 2};
+    mos_puts(buffer, 6, 0);
+}
+
+
+// void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
+	
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(0); //Ignored channel
+// 	putch(5);
+// 	putch(4);
+// 	write16bit(buffer_id);
+// 	write16bit(frequency);
+	
+// }
+
+static inline void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
+    char buffer[10] = {23, 0, 0x85, 0, 5, 4, buffer_id & 0xFF, buffer_id >> 8, frequency & 0xFF, frequency >> 8};
+    mos_puts(buffer, 10, 0);
+}
+
+// void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
+	
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(13);
+// 	write16bit(sample_rate);
+	
+// }
+
+static inline void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
+    char buffer[7] = {23, 0, 0x85, channel, 13, sample_rate & 0xFF, sample_rate >> 8};
+    mos_puts(buffer, 7, 0);
+}
+
+// void reset_channel(uint8_t channel) {
+	
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(10);
+	
+// }
+
+static inline void reset_channel(uint8_t channel) {
+    char buffer[5] = {23, 0, 0x85, channel, 10};
+    mos_puts(buffer, 5, 0);
+}
+
+// void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+	
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(channel);
+// 	putch(12);
+// 	write24bit(duration);
+	
+// }
+
+static inline void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+    char buffer[8] = {23, 0, 0x85, channel, 12, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
+    mos_puts(buffer, 8, 0);
+}
+
+void wait_tick(uint16_t ticks) {
+
+	while((ticker + ticks) < ticker) {}
 
 }
 
-void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+// void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
 
-	putch(24);
+// 	//VDU 23, 0, &85, channel, 5, 6, bufferId; repeatStart; repeatStartHighByte
 
-	write16bit(left);
-	write16bit(bottom);
-	write16bit(right);
-	write16bit(top);
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(0);
+// 	putch(5);
+// 	putch(6);
+// 	write16bit(sample_id);
+// 	write24bit(start);
 
+// }
+
+static inline void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
+    char buffer[11] = {23, 0, 0x85, 0, 5, 6, sample_id & 0xFF, sample_id >> 8, start & 0xFF, (start >> 8) & 0xFF, start >> 16};
+    mos_puts(buffer, 11, 0);
 }
 
-void cursor_tab(uint8_t x, uint8_t y) {
 
-	putch(0x1F);
-	putch(x);
-	putch(y);
+// void switch_buffers() {
 
+// 	//VDU 23, 0, &C3
+
+// 	putch(23);
+// 	putch(0);
+// 	putch(0xC3);
+
+// }
+
+static inline void switch_buffers() {
+    char buffer[3] = {23, 0, 0xC3};
+    mos_puts(buffer, 3, 0);
+}
+
+
+// void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+
+// 	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
+
+// 	putch(23);
+// 	putch(0);
+// 	putch(0x85);
+// 	putch(0);
+// 	putch(5);
+// 	putch(8);
+// 	write16bit(sample_id);
+// 	write24bit(length);
+
+// }
+
+static inline void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+    char buffer[11] = {23, 0, 0x85, 0, 5, 8, sample_id & 0xFF, sample_id >> 8, length & 0xFF, (length >> 8) & 0xFF, length >> 16};
+    mos_puts(buffer, 11, 0);
+}
+
+// void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+
+// 	putch(0x1C);
+
+// 	putch(left);
+// 	putch(bottom);
+// 	putch(right);
+// 	putch(top);
+
+// }
+
+static inline void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+    char buffer[5] = {0x1C, left, bottom, right, top};
+    mos_puts(buffer, 5, 0);
+}
+
+// void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+
+// 	putch(24);
+
+// 	write16bit(left);
+// 	write16bit(bottom);
+// 	write16bit(right);
+// 	write16bit(top);
+
+// }
+
+static inline void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+    char buffer[9] = {24, left & 0xFF, left >> 8, bottom & 0xFF, bottom >> 8, right & 0xFF, right >> 8, top & 0xFF, top >> 8};
+    mos_puts(buffer, 9, 0);
+}
+
+// void cursor_tab(uint8_t x, uint8_t y) {
+
+// 	putch(0x1F);
+// 	putch(x);
+// 	putch(y);
+
+// }
+
+static inline void cursor_tab(uint8_t x, uint8_t y) {
+    char buffer[3] = {0x1F, x, y};
+    mos_puts(buffer, 3, 0);
 }
 
 uint8_t index_period(uint16_t period) {
@@ -791,10 +985,14 @@ uint16_t clamp_period(uint16_t period) {
     else return period;
 }
 
-int16_t clamp_volume(int8_t volume) {
+uint8_t clamp_volume(int8_t volume) {
     if (volume <= 0) return 0;
-    else if (volume >= 127) return 127;
+    else if (volume >= 64) return 64;
     else return volume;
+}
+
+int scale_volume(int original_volume) {
+    return (original_volume * 127) / 64;
 }
 
 void fill_empty(uint8_t rows) {
@@ -861,8 +1059,8 @@ void dispatch_channel(uint8_t i) {
 		
 		channels_data[i].current_hz = channels_data[i].tuned_period > 0 ? mod.pd_hz / channels_data[i].tuned_period : 0;
 
-		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, -1, channels_data[i].current_hz);
-		else play_sample(channels_data[i].latched_sample, i, channels_data[i].current_volume, 0, channels_data[i].current_hz);
+		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, scale_volume(channels_data[i].current_volume), -1, channels_data[i].current_hz);
+		else play_sample(channels_data[i].latched_sample, i, scale_volume(channels_data[i].current_volume), 0, channels_data[i].current_hz);
 		if (channels_data[i].current_effect == EFFECT_OFFSET) set_position(i, channels_data[i].latched_offset);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -877,33 +1075,33 @@ void volume_slide(uint8_t i) {
 
 		if (slide_x) {
 
-			uint8_t slide_adjusted = (slide_x * 2) - 1;
+			uint8_t slide_adjusted = (slide_x);
 			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume + slide_adjusted);
-			set_volume(i, channels_data[i].current_volume);
+			set_volume(i, scale_volume(channels_data[i].current_volume));
 			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 		} else if (slide_y) {
 
-			uint8_t slide_adjusted = (slide_y * 2) - 1;
+			uint8_t slide_adjusted = (slide_y);
 			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume - slide_adjusted);
-			set_volume(i, channels_data[i].current_volume);
+			set_volume(i, scale_volume(channels_data[i].current_volume));
 			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 		}
 
 	} else {
 
-		if ((channels_data[i].current_effect_param >> 4) == 0x0A) {
+		if ((channels_data[i].current_effect_param >> 4) == EXT_VOL_UP) {
 
-			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F) * 2) - 1;
+			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F));
 			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume + slide_adjusted);
-			set_volume(i, channels_data[i].current_volume);
+			set_volume(i, scale_volume(channels_data[i].current_volume));
 			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;	
 
-		} else if ((channels_data[i].current_effect_param >> 4) == 0x0B) {
+		} else if ((channels_data[i].current_effect_param >> 4) == EXT_VOL_DOWN) {
 
-			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F) * 2) - 1;
+			uint8_t slide_adjusted = ((channels_data[i].current_effect_param & 0x0F));
 			channels_data[i].current_volume = clamp_volume(channels_data[i].current_volume - slide_adjusted);
-			set_volume(i, channels_data[i].current_volume);
+			set_volume(i, scale_volume(channels_data[i].current_volume));
 			mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 		}
@@ -979,9 +1177,9 @@ void do_tremulo(uint8_t i) {
 	delta *= channels_data[i].tremolo_depth;
 	delta >>= 6; //Divide by 64
 
-	if (channels_data[i].tremolo_position < 0) set_volume(i, channels_data[i].current_volume - (delta * 2) - 1);
-	else if (channels_data[i].tremolo_position >= 0) set_volume(i, channels_data[i].current_volume + (delta * 2) - 1);
-	if (channels_data[i].current_volume > 127) channels_data[i].current_volume = 127;
+	if (channels_data[i].tremolo_position < 0) set_volume(i, scale_volume(channels_data[i].current_volume - (delta)));
+	else if (channels_data[i].tremolo_position >= 0) set_volume(i, scale_volume(channels_data[i].current_volume + (delta)));
+	if (channels_data[i].current_volume > 64) channels_data[i].current_volume = 64;
 	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
 	
 	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
@@ -1031,6 +1229,45 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 	for (uint8_t i = 0; i < mod.channels; i++) {
 
+		if (mod.channel_disabled[i]) {
+			
+			#ifdef VERBOSE
+
+				putch(17);
+				uint8_t new_colour = 9+i;
+				if (new_colour == 16) new_colour++;
+				putch(new_colour);			
+
+				if (mod.channels == 4) {
+				
+					   //## FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE
+					printf("### ## ## ###");
+					if (i != mod.channels - 1) printf(" ");
+
+				} else if (mod.channels == 6) {
+
+					   //## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
+					printf("### ##");
+					if (i != mod.channels - 1) printf(" ");			
+
+
+				} else if (mod.channels == 8) {
+					
+					   //## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
+					printf("### ##");
+					if (i != mod.channels - 1) printf(" ");
+					
+				}
+
+			#endif
+
+			//Move on to next channel/note in memory
+
+			noteData += 4;
+
+			continue;
+		}
+
 		#ifdef VERBOSE
 
 			putch(17);
@@ -1071,9 +1308,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			channels_data[i].latched_sample = sample_number;
 			channels_data[i].finetune = mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
-			channels_data[i].latched_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME * 2) - 1);	
-			channels_data[i].current_volume = channels_data[i].latched_volume;
-			set_volume(i, channels_data[i].current_volume);
+			//channels_data[i].latched_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME * 2) - 1);	
+			channels_data[i].current_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME));
+			set_volume(i, scale_volume(channels_data[i].current_volume));
 
 			if (period > 0 && (effect_number != EFFECT_PORTA_NOTE) && (effect_number != EFFECT_VOL_TONE)) {
 
@@ -1143,8 +1380,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 				case EFFECT_VOL_SET: {//Set channel volume to xx
 
-					channels_data[i].current_volume = clamp_volume((channels_data[i].current_effect_param * 2) - 1);
-					set_volume(i, channels_data[i].current_volume);
+					channels_data[i].current_volume = (channels_data[i].current_effect_param);
+					set_volume(i, scale_volume(channels_data[i].current_volume));
 					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
 				} break;				
@@ -1267,7 +1504,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						mod.current_bpm = channels_data[i].current_effect_param;
 						timer_end(TIMER_NO);
-						timer_begin(TIMER_NO, (rr_array[mod.current_bpm - 0x20] / 10) * 9, div_array[mod.current_bpm - 0x20]);
+						timer_begin(TIMER_NO, (rr_array[mod.current_bpm - 0x20]), div_array[mod.current_bpm - 0x20]);
 
 					}
 
@@ -1285,13 +1522,13 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			if (mod.channels == 4) {
 			
 				//## FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE FFF SS VV EEE
-				printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+				printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume), effect_number, effect_param);
 				if (i != mod.channels - 1) printf(" ");
 
 			} else if (mod.channels == 6) {
 
 				//## FFF SS FFF SS FFF SS FFF SS FFF SS FFF SS
-				printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume / 2) + 1, effect_number, effect_param);
+				printf("%s %02u %02u %X%02X", period_to_note(period), sample_number, (channels_data[i].current_volume), effect_number, effect_param);
 				if (i != mod.channels - 1) printf(" ");			
 
 
@@ -1305,7 +1542,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 		#endif
 
-		//Move on to next note in memory
+		//Move on to next channel/note in memory
 
 		noteData += 4;
 
@@ -1535,6 +1772,9 @@ void draw_sample_bars() {
 
 	draw_rect(26,33 + 16,26 + global_volume,37 + 16); //Master volume front bar
 
+	//void draw_progress_bar(int total, int progress, int maxBarLength, int upperX, int upperY, int barHeight, uint8_t bg, uint8_t fg) {
+	//draw_progress_bar(127, global_volume, 128, 30, 49, 3, 7, 15);
+
 	for (uint8_t i = 1, j = 0; i < 32;) {
 
 		while (i < 32 && !mod.sample_live[i]) {
@@ -1567,7 +1807,7 @@ void draw_sample_bars() {
 	
 	//Volume area to scroll is (x1,y1,x2,y2) 
 
-	set_graphics_window(12,230,150,198); //Left, bottom, right, top, remember
+	set_graphics_window(8,228,152,213); //Left, bottom, right, top, remember
 
 	//Workaround for scrolling bug
 	set_graphics_foreground(7);
@@ -1586,15 +1826,23 @@ void draw_sample_bars() {
 	// draw_rect(154,228, 150,232 - max_vol); //Draw a max bar (white)
 
 	set_graphics_foreground(14);
-	draw_rect(154,228, 148,230 - mean_vol); //Draw a mean bar (cyan)
+	draw_rect(148,228,152,228 - mean_vol); //Draw a mean bar (cyan)
 	
 	set_graphics_window(0,239,639,0); //Ensure graphics window is full
 
+	//Order update
+	
 	//left, bottom, right, top
-	set_text_window(0,30,20,29);
+	set_text_window(0,26,20,25);
 	putch(17);
 	putch(15); //White row text
-	printf("  BPM: %03u Speed: %02u", mod.current_bpm, mod.current_speed);
+	printf(" Page %03u of %03u", mod.current_order, mod.header.num_orders);
+
+	//BPM/Speed update
+
+	//left, bottom, right, top
+	set_text_window(0,30,20,29);
+	printf(" BPM: %03u Speed: %02u", mod.current_bpm, mod.current_speed);
 	set_text_window(20,29,80,2);
 	cursor_tab(0,27);
 
@@ -1615,6 +1863,18 @@ int main(int argc, char * argv[])
 
 	if (argc == 3) mod.pd_hz = atoi(argv[2]);
 	else mod.pd_hz = PD_HZ;
+
+	if (argc == 4) {
+
+		uint8_t param = atoi(argv[3]);
+
+		for (uint8_t i = 0; i < MAX_CHANNELS - 1; i++) {
+
+			if (test_bit(param, i)) mod.channel_disabled[i] = true;
+
+		}
+		 
+	}
 
 	file = fopen(argv[1], "rb");
     if (file == NULL) {
@@ -1661,8 +1921,9 @@ int main(int argc, char * argv[])
 	for (uint8_t i = 0; i < mod.channels; i++) {
 		enable_channel(i);
 		reset_channel(i);
+		set_volume(i, 0);
 		//channels_data[i].latched_sample = 0;
-		channels_data[i].latched_volume = 0;
+		//channels_data[i].latched_volume = 0;
 		channels_data[i].current_volume = 0;
 		channels_data[i].current_effect = 0xFF;
 		//channels_data[i].current_effect_param = 0;
@@ -1820,8 +2081,9 @@ int main(int argc, char * argv[])
 
 		}
 
-		set_graphics_foreground(7);
-		draw_rect(8,198,152,230); //Volume background
+		//set_graphics_foreground(7);
+		//draw_rect(8,198,152,230); //Volume background
+		rect_drop_shadow(8,214,152,228,2,4,7,8);
 		
 		set_text_window(20,2,80,1);
 
