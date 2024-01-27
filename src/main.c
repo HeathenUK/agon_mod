@@ -315,230 +315,225 @@ void write24bit(uint24_t w)
     putch(w >> 16);	 // write MSB	
 }
 
-// void clear_assets() {
+void clear_assets() {
 
-// 	//VDU 23, 27, 16
+	//VDU 23, 27, 16
 
-// 	putch(23);
-// 	putch(27);
-// 	putch(16);
+	putch(23);
+	putch(27);
+	putch(16);
 
-// }
-
-static inline void clear_assets() {
-    char buffer[3] = {23, 27, 16};
-    mos_puts(buffer, 3, 0);
 }
 
-// void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {	
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0xA0);
-// 	write16bit(buffer_id);
-// 	putch(0);
-// 	write16bit(buffer_size);
-	
-//     mos_puts(buffer_content, buffer_size, 0);
-
+// static inline void clear_assets() {
+//     char buffer[3] = {23, 27, 16};
+//     mos_puts(buffer, 3, 0);
 // }
 
-static inline void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {
-    char buffer[8] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 0, buffer_size & 0xFF, buffer_size >> 8};
-    mos_puts(buffer, 8, 0);
+void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {	
+
+	putch(23);
+	putch(0);
+	putch(0xA0);
+	write16bit(buffer_id);
+	putch(0);
+	write16bit(buffer_size);
+	
     mos_puts(buffer_content, buffer_size, 0);
+
 }
 
-// void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);	
-// 	putch(0);
-// 	putch(5);
-// 	putch(2);
-// 	write16bit(buffer_id);
-// 	putch(format);
-
+// static inline void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buffer_size) {
+//     char buffer[8] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 0, buffer_size & 0xFF, buffer_size >> 8};
+//     mos_puts(buffer, 8, 0);
+//     mos_puts(buffer_content, buffer_size, 0);
 // }
 
-static inline void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
-    char buffer[9] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, format};
-    mos_puts(buffer, 9, 0);
+void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
+
+	putch(23);
+	putch(0);
+	putch(0x85);	
+	putch(0);
+	putch(5);
+	putch(2);
+	write16bit(buffer_id);
+	putch(format);
+
 }
 
-
-// void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);	
-// 	putch(0); //Ignored
-// 	putch(5);
-// 	putch(2);
-// 	write16bit(buffer_id);
-// 	putch(24);
-// 	write16bit(frequency);
-
+// static inline void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
+//     char buffer[9] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, format};
+//     mos_puts(buffer, 9, 0);
 // }
 
-static inline void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
-    char buffer[11] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, 24, frequency & 0xFF, frequency >> 8};
-    mos_puts(buffer, 11, 0);
+void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
+
+	putch(23);
+	putch(0);
+	putch(0x85);	
+	putch(0); //Ignored
+	putch(5);
+	putch(2);
+	write16bit(buffer_id);
+	putch(24);
+	write16bit(frequency);
+
 }
 
-// void enable_channel(uint8_t channel) {
-
-// 	//VDU 23, 0, &85, channel, 8
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(8);
-
+// static inline void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
+//     char buffer[11] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, 24, frequency & 0xFF, frequency >> 8};
+//     mos_puts(buffer, 11, 0);
 // }
 
-static inline void enable_channel(uint8_t channel) {
-    char buffer[5] = {23, 0, 0x85, channel, 8};
-    mos_puts(buffer, 5, 0);
+void enable_channel(uint8_t channel) {
+
+	//VDU 23, 0, &85, channel, 8
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(8);
+
 }
 
+// static inline void enable_channel(uint8_t channel) {
+//     char buffer[5] = {23, 0, 0x85, channel, 8};
+//     mos_puts(buffer, 5, 0);
+// }
 
-// void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
+void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
 	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel_id);
-// 	putch(4);
-// 	putch(8);
-// 	write16bit(sample_id);
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel_id);
+	putch(4);
+	putch(8);
+	write16bit(sample_id);
 	
-// }
-
-static inline void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
-    char buffer[8] = {23, 0, 0x85, channel_id, 4, 8, sample_id & 0xFF, sample_id >> 8};
-    mos_puts(buffer, 8, 0);
 }
 
-// void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
-
-// 	assign_sample_to_channel(sample_id, channel);
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(0);
-// 	putch(volume);
-// 	write16bit(frequency);
-// 	write16bit(duration);
-
+// static inline void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
+//     char buffer[8] = {23, 0, 0x85, channel_id, 4, 8, sample_id & 0xFF, sample_id >> 8};
+//     mos_puts(buffer, 8, 0);
 // }
 
-static inline void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
-    assign_sample_to_channel(sample_id, channel);
-    char buffer[10] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, duration >> 8};
-    mos_puts(buffer, 10, 0);
+void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
+
+	assign_sample_to_channel(sample_id, channel);
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(0);
+	putch(volume);
+	write16bit(frequency);
+	write16bit(duration);
+
 }
 
-
-// void set_volume(uint8_t channel, uint8_t volume) {
-
-// 	//VDU 23, 0, &85, channel, 2, volume
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(2);
-// 	putch(volume);
-
+// static inline void play_sample(uint16_t sample_id, uint8_t channel, uint8_t volume, uint16_t duration, uint16_t frequency) {
+//     assign_sample_to_channel(sample_id, channel);
+//     char buffer[10] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, duration >> 8};
+//     mos_puts(buffer, 10, 0);
 // }
 
-static inline void set_volume(uint8_t channel, uint8_t volume) {
-    char buffer[6] = {23, 0, 0x85, channel, 2, volume};
-    mos_puts(buffer, 6, 0);
+
+void set_volume(uint8_t channel, uint8_t volume) {
+
+	//VDU 23, 0, &85, channel, 2, volume
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(2);
+	putch(volume);
+
 }
 
-
-// void set_frequency(uint8_t channel, uint16_t frequency) {
-
-// 	//VDU 23, 0, &85, channel, 3, frequency;
-
-// 	//Shouldn't be necessary given period clamp, but belt and braces.
-
-// 	if (frequency > 2100) frequency = 2100;
-// 	else if (frequency < 50) frequency = 50;
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(3);
-// 	write16bit(frequency);
-
+// static inline void set_volume(uint8_t channel, uint8_t volume) {
+//     char buffer[6] = {23, 0, 0x85, channel, 2, volume};
+//     mos_puts(buffer, 6, 0);
 // }
 
-static inline void set_frequency(uint8_t channel, uint16_t frequency) {
-    if (frequency > 2100) frequency = 2100;
-    else if (frequency < 50) frequency = 50;
+void set_frequency(uint8_t channel, uint16_t frequency) {
 
-    char buffer[7] = {23, 0, 0x85, channel, 3, frequency & 0xFF, frequency >> 8};
-    mos_puts(buffer, 7, 0);
+	//VDU 23, 0, &85, channel, 3, frequency;
+
+	//Shouldn't be necessary given period clamp, but belt and braces.
+
+	if (frequency > 3000) frequency = 3000;
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(3);
+	write16bit(frequency);
+
 }
 
+// static inline void set_frequency(uint8_t channel, uint16_t frequency) {
+//     if (frequency > 2100) frequency = 2100;
+//     else if (frequency < 50) frequency = 50;
 
-// void set_position(uint8_t channel, uint24_t position) {
-
-// 	//VDU 23, 0, &85, channel, 11, position; positionHighByte
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(11);
-// 	write24bit(position);
-
+//     char buffer[7] = {23, 0, 0x85, channel, 3, frequency & 0xFF, frequency >> 8};
+//     mos_puts(buffer, 7, 0);
 // }
 
-static inline void set_position(uint8_t channel, uint24_t position) {
-    char buffer[8] = {23, 0, 0x85, channel, 11, position & 0xFF, (position >> 8) & 0xFF, position >> 16};
-    mos_puts(buffer, 8, 0);
+
+void set_position(uint8_t channel, uint24_t position) {
+
+	//VDU 23, 0, &85, channel, 11, position; positionHighByte
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(11);
+	write24bit(position);
+
 }
 
-// void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(0);
-// 	putch(volume);
-// 	write16bit(frequency);
-// 	write16bit(duration);
-
+// static inline void set_position(uint8_t channel, uint24_t position) {
+//     char buffer[8] = {23, 0, 0x85, channel, 11, position & 0xFF, (position >> 8) & 0xFF, position >> 16};
+//     mos_puts(buffer, 8, 0);
 // }
 
-static inline void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
-    char buffer[11] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
-    mos_puts(buffer, 11, 0);
+void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(0);
+	putch(volume);
+	write16bit(frequency);
+	write16bit(duration);
+
 }
 
-// void vdu_move(uint16_t x, uint16_t y) {
-
-// 	putch(25);
-// 	putch(4);
-// 	write16bit(x);
-// 	write16bit(y);
-
+// static inline void play_channel(uint8_t channel, uint8_t volume, uint24_t duration, uint16_t frequency) {
+//     char buffer[11] = {23, 0, 0x85, channel, 0, volume, frequency & 0xFF, frequency >> 8, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
+//     mos_puts(buffer, 11, 0);
 // }
 
-static inline void vdu_move(uint16_t x, uint16_t y) {
-    char buffer[6] = {25, 4, x & 0xFF, x >> 8, y & 0xFF, y >> 8};
-    mos_puts(buffer, 6, 0);
+void vdu_move(uint16_t x, uint16_t y) {
+
+	putch(25);
+	putch(4);
+	write16bit(x);
+	write16bit(y);
+
 }
 
+// static inline void vdu_move(uint16_t x, uint16_t y) {
+//     char buffer[6] = {25, 4, x & 0xFF, x >> 8, y & 0xFF, y >> 8};
+//     mos_puts(buffer, 6, 0);
+// }
 
 void set_graphics_foreground(uint8_t colour) {
 
@@ -548,28 +543,28 @@ void set_graphics_foreground(uint8_t colour) {
 
 }
 
-// void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
+void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
 
-// 	//MOVE x1,y1:MOVE x1+w,y1+h:PLOT 189,x2,y2
-// 	//PLOT = VDU 25,k,x;y;
-// 	//MOVE = VDU 25 4 x; y;
+	//MOVE x1,y1:MOVE x1+w,y1+h:PLOT 189,x2,y2
+	//PLOT = VDU 25,k,x;y;
+	//MOVE = VDU 25 4 x; y;
 
-// 	putch(25);
-// 	putch(4);
-// 	write16bit(x1);
-// 	write16bit(y1);
+	putch(25);
+	putch(4);
+	write16bit(x1);
+	write16bit(y1);
 
-// 	putch(25);
-// 	putch(101);
-// 	write16bit(x2);
-// 	write16bit(y2);	
+	putch(25);
+	putch(101);
+	write16bit(x2);
+	write16bit(y2);	
 
-// }
-
-static inline void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
-    char buffer[12] = {25, 4, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8, 25, 101, x2 & 0xFF, x2 >> 8, y2 & 0xFF, y2 >> 8};
-    mos_puts(buffer, 12, 0);
 }
+
+// static inline void draw_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
+//     char buffer[12] = {25, 4, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8, 25, 101, x2 & 0xFF, x2 >> 8, y2 & 0xFF, y2 >> 8};
+//     mos_puts(buffer, 12, 0);
+// }
 
 
 void rect_drop_shadow(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t gap_bottom, uint8_t gap_right, uint8_t fg, uint8_t bg) {
@@ -621,102 +616,102 @@ void draw_progress_bar(int total, int progress, int maxBarLength, int upperX, in
     }
 }
 
-// void plot_point(uint16_t x1, uint16_t y1) {
+void plot_point(uint16_t x1, uint16_t y1) {
 
-// 	//PLOT 69,x,y
+	//PLOT 69,x,y
 
-// 	putch(25);
-// 	putch(69);
-// 	write16bit(x1);
-// 	write16bit(y1);
+	putch(25);
+	putch(69);
+	write16bit(x1);
+	write16bit(y1);
 
-// }
-
-static inline void plot_point(uint16_t x1, uint16_t y1) {
-    char buffer[6] = {25, 69, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8};
-    mos_puts(buffer, 6, 0);
 }
 
-// void clear_buffer(uint16_t buffer_id) {
-	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0xA0);
-// 	write16bit(buffer_id);
-// 	putch(2);
-	
+// static inline void plot_point(uint16_t x1, uint16_t y1) {
+//     char buffer[6] = {25, 69, x1 & 0xFF, x1 >> 8, y1 & 0xFF, y1 >> 8};
+//     mos_puts(buffer, 6, 0);
 // }
 
-static inline void clear_buffer(uint16_t buffer_id) {
-    char buffer[6] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 2};
-    mos_puts(buffer, 6, 0);
+void clear_buffer(uint16_t buffer_id) {
+	
+	putch(23);
+	putch(0);
+	putch(0xA0);
+	write16bit(buffer_id);
+	putch(2);
+	
 }
 
-
-// void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
-	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(0); //Ignored channel
-// 	putch(5);
-// 	putch(4);
-// 	write16bit(buffer_id);
-// 	write16bit(frequency);
-	
+// static inline void clear_buffer(uint16_t buffer_id) {
+//     char buffer[6] = {23, 0, 0xA0, buffer_id & 0xFF, buffer_id >> 8, 2};
+//     mos_puts(buffer, 6, 0);
 // }
 
-static inline void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
-    char buffer[10] = {23, 0, 0x85, 0, 5, 4, buffer_id & 0xFF, buffer_id >> 8, frequency & 0xFF, frequency >> 8};
-    mos_puts(buffer, 10, 0);
+
+void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(0); //Ignored channel
+	putch(5);
+	putch(4);
+	write16bit(buffer_id);
+	write16bit(frequency);
+	
 }
 
-// void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
-	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(13);
-// 	write16bit(sample_rate);
-	
+// static inline void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
+//     char buffer[10] = {23, 0, 0x85, 0, 5, 4, buffer_id & 0xFF, buffer_id >> 8, frequency & 0xFF, frequency >> 8};
+//     mos_puts(buffer, 10, 0);
 // }
 
-static inline void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
-    char buffer[7] = {23, 0, 0x85, channel, 13, sample_rate & 0xFF, sample_rate >> 8};
-    mos_puts(buffer, 7, 0);
+void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(13);
+	write16bit(sample_rate);
+	
 }
 
-// void reset_channel(uint8_t channel) {
-	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(10);
-	
+// static inline void set_channel_rate(uint8_t channel, uint16_t sample_rate) {
+//     char buffer[7] = {23, 0, 0x85, channel, 13, sample_rate & 0xFF, sample_rate >> 8};
+//     mos_puts(buffer, 7, 0);
 // }
 
-static inline void reset_channel(uint8_t channel) {
-    char buffer[5] = {23, 0, 0x85, channel, 10};
-    mos_puts(buffer, 5, 0);
+void reset_channel(uint8_t channel) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(10);
+	
 }
 
-// void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
-	
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(channel);
-// 	putch(12);
-// 	write24bit(duration);
-	
+// static inline void reset_channel(uint8_t channel) {
+//     char buffer[5] = {23, 0, 0x85, channel, 10};
+//     mos_puts(buffer, 5, 0);
 // }
 
-static inline void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
-    char buffer[8] = {23, 0, 0x85, channel, 12, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
-    mos_puts(buffer, 8, 0);
+void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+	
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(12);
+	write24bit(duration);
+	
 }
+
+// static inline void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+//     char buffer[8] = {23, 0, 0x85, channel, 12, duration & 0xFF, (duration >> 8) & 0xFF, duration >> 16};
+//     mos_puts(buffer, 8, 0);
+// }
 
 void wait_tick(uint16_t ticks) {
 
@@ -724,107 +719,107 @@ void wait_tick(uint16_t ticks) {
 
 }
 
-// void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
+void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
 
-// 	//VDU 23, 0, &85, channel, 5, 6, bufferId; repeatStart; repeatStartHighByte
+	//VDU 23, 0, &85, channel, 5, 6, bufferId; repeatStart; repeatStartHighByte
 
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(0);
-// 	putch(5);
-// 	putch(6);
-// 	write16bit(sample_id);
-// 	write24bit(start);
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(0);
+	putch(5);
+	putch(6);
+	write16bit(sample_id);
+	write24bit(start);
 
-// }
-
-static inline void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
-    char buffer[11] = {23, 0, 0x85, 0, 5, 6, sample_id & 0xFF, sample_id >> 8, start & 0xFF, (start >> 8) & 0xFF, start >> 16};
-    mos_puts(buffer, 11, 0);
 }
 
-
-// void switch_buffers() {
-
-// 	//VDU 23, 0, &C3
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0xC3);
-
+// static inline void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
+//     char buffer[11] = {23, 0, 0x85, 0, 5, 6, sample_id & 0xFF, sample_id >> 8, start & 0xFF, (start >> 8) & 0xFF, start >> 16};
+//     mos_puts(buffer, 11, 0);
 // }
 
-static inline void switch_buffers() {
-    char buffer[3] = {23, 0, 0xC3};
-    mos_puts(buffer, 3, 0);
+
+void switch_buffers() {
+
+	//VDU 23, 0, &C3
+
+	putch(23);
+	putch(0);
+	putch(0xC3);
+
 }
 
-
-// void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
-
-// 	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
-
-// 	putch(23);
-// 	putch(0);
-// 	putch(0x85);
-// 	putch(0);
-// 	putch(5);
-// 	putch(8);
-// 	write16bit(sample_id);
-// 	write24bit(length);
-
+// static inline void switch_buffers() {
+//     char buffer[3] = {23, 0, 0xC3};
+//     mos_puts(buffer, 3, 0);
 // }
 
-static inline void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
-    char buffer[11] = {23, 0, 0x85, 0, 5, 8, sample_id & 0xFF, sample_id >> 8, length & 0xFF, (length >> 8) & 0xFF, length >> 16};
-    mos_puts(buffer, 11, 0);
+
+void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+
+	//VDU 23, 0, &85, channel, 5, 8, bufferId; repeatLength; repeatLengthHighByte
+
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(0);
+	putch(5);
+	putch(8);
+	write16bit(sample_id);
+	write24bit(length);
+
 }
 
-// void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
-
-// 	putch(0x1C);
-
-// 	putch(left);
-// 	putch(bottom);
-// 	putch(right);
-// 	putch(top);
-
+// static inline void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
+//     char buffer[11] = {23, 0, 0x85, 0, 5, 8, sample_id & 0xFF, sample_id >> 8, length & 0xFF, (length >> 8) & 0xFF, length >> 16};
+//     mos_puts(buffer, 11, 0);
 // }
 
-static inline void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
-    char buffer[5] = {0x1C, left, bottom, right, top};
-    mos_puts(buffer, 5, 0);
+void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+
+	putch(0x1C);
+
+	putch(left);
+	putch(bottom);
+	putch(right);
+	putch(top);
+
 }
 
-// void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
-
-// 	putch(24);
-
-// 	write16bit(left);
-// 	write16bit(bottom);
-// 	write16bit(right);
-// 	write16bit(top);
-
+// static inline void set_text_window(uint8_t left, uint8_t bottom, uint8_t right, uint8_t top) {
+//     char buffer[5] = {0x1C, left, bottom, right, top};
+//     mos_puts(buffer, 5, 0);
 // }
 
-static inline void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
-    char buffer[9] = {24, left & 0xFF, left >> 8, bottom & 0xFF, bottom >> 8, right & 0xFF, right >> 8, top & 0xFF, top >> 8};
-    mos_puts(buffer, 9, 0);
+void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+
+	putch(24);
+
+	write16bit(left);
+	write16bit(bottom);
+	write16bit(right);
+	write16bit(top);
+
 }
 
-// void cursor_tab(uint8_t x, uint8_t y) {
-
-// 	putch(0x1F);
-// 	putch(x);
-// 	putch(y);
-
+// static inline void set_graphics_window(uint16_t left, uint16_t bottom, uint16_t right, uint16_t top) {
+//     char buffer[9] = {24, left & 0xFF, left >> 8, bottom & 0xFF, bottom >> 8, right & 0xFF, right >> 8, top & 0xFF, top >> 8};
+//     mos_puts(buffer, 9, 0);
 // }
 
-static inline void cursor_tab(uint8_t x, uint8_t y) {
-    char buffer[3] = {0x1F, x, y};
-    mos_puts(buffer, 3, 0);
+void cursor_tab(uint8_t x, uint8_t y) {
+
+	putch(0x1F);
+	putch(x);
+	putch(y);
+
 }
+
+// static inline void cursor_tab(uint8_t x, uint8_t y) {
+//     char buffer[3] = {0x1F, x, y};
+//     mos_puts(buffer, 3, 0);
+// }
 
 uint8_t index_period(uint16_t period) {
     switch (period) {
@@ -1118,21 +1113,32 @@ void pitch_slide(uint8_t i) {
 
 			if (channels_data[i].target_period > channels_data[i].tuned_period) {
 
-				channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + channels_data[i].slide_rate);
-				if (channels_data[i].tuned_period > channels_data[i].target_period) channels_data[i].tuned_period = clamp_period(channels_data[i].target_period);
-				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-				if (channels_data[i].tuned_period >= channels_data[i].target_period) channels_data[i].target_period = 0;
+				if (channels_data[i].tuned_period + channels_data[i].slide_rate >= channels_data[i].target_period) {
+					channels_data[i].tuned_period = channels_data[i].target_period;
+					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].target_period = 0;
+				} else {
+					channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + channels_data[i].slide_rate);
+					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+				}
 
 			} else if (channels_data[i].target_period < channels_data[i].tuned_period) {
 
-				channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period - channels_data[i].slide_rate);
-				if (channels_data[i].tuned_period < channels_data[i].target_period) channels_data[i].tuned_period = clamp_period(channels_data[i].target_period);
-				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
-				if (channels_data[i].tuned_period <= channels_data[i].target_period) channels_data[i].target_period = 0;
+				if (channels_data[i].tuned_period - channels_data[i].slide_rate <= channels_data[i].target_period) {
+					channels_data[i].tuned_period = channels_data[i].target_period;
+					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].target_period = 0;
+				} else {
+					channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period - channels_data[i].slide_rate);
+					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+				}
 
-			} else if (channels_data[i].target_period == channels_data[i].tuned_period) {
+			} 
+			
+			if (channels_data[i].target_period == channels_data[i].tuned_period) {
 
 				channels_data[i].target_period = 0;
+				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
 
 			}
 
@@ -1836,7 +1842,7 @@ void draw_sample_bars() {
 	set_text_window(0,26,20,25);
 	putch(17);
 	putch(15); //White row text
-	printf(" Page %03u of %03u", mod.current_order, mod.header.num_orders);
+	printf(" Page %03u of %03u", mod.current_order + 1, mod.header.num_orders);
 
 	//BPM/Speed update
 
@@ -1861,10 +1867,10 @@ int main(int argc, char * argv[])
 		return 0;
 	}
 
-	if (argc == 3) mod.pd_hz = atoi(argv[2]);
+	if (argc >= 3) mod.pd_hz = atoi(argv[2]);
 	else mod.pd_hz = PD_HZ;
 
-	if (argc == 4) {
+	if (argc >= 4) {
 
 		uint8_t param = atoi(argv[3]);
 
@@ -1934,6 +1940,8 @@ int main(int argc, char * argv[])
 	//mod.pattern_max = 0;
 	mod.current_speed = 6;
 	mod.current_bpm = 125;
+
+	if (argc >= 5) mod.current_order = atoi(argv[4]) - 1;
 
 	ticker = 0;
 	timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
@@ -2170,7 +2178,7 @@ int main(int argc, char * argv[])
 			if (mod.current_row == 64) {
 
 				mod.current_order++;
-				if (mod.current_order >= mod.header.num_orders - 1) mod.current_order = 0;
+				if (mod.current_order == mod.header.num_orders) mod.current_order = 0;
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
 				//header_line();
 				mod.current_row = 0;
