@@ -1396,12 +1396,12 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 		if (channels_data[i].current_effect != 0xFF) {
 
+			uint8_t param_x = channels_data[i].current_effect_param >> 4;
+			uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
+
 			switch (channels_data[i].current_effect) {
 
 				case EFFECT_VIBRATO: {//Vibrato
-
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
 					if (channels_data[i].vibrato_retrigger == true) channels_data[i].vibrato_position = 0;
 					if (param_x > 0) channels_data[i].vibrato_speed = param_x;
@@ -1410,9 +1410,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				} break;	
 
 				case EFFECT_TREMULO: {//Tremolo
-
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
 					if (channels_data[i].tremolo_retrigger == true) channels_data[i].tremolo_position = 0;
 					if (param_x) channels_data[i].tremolo_speed = param_x;
@@ -1444,7 +1441,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 				case EFFECT_ROW_JUMP: {//Pattern break - Skip to next pattern, row xx
 
 					if (mod.pattern_break_pending == false) {
-						mod.new_row = channels_data[i].current_effect_param;
+						mod.new_row = (param_x * 10) + param_y;
 						mod.pattern_break_pending = true;
 					}
 
@@ -1452,9 +1449,6 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 
 				case EFFECT_EXTENDED: {//Extended functions
-
-					uint8_t param_x = channels_data[i].current_effect_param >> 4;
-					uint8_t param_y = channels_data[i].current_effect_param & 0x0F;
 					
 					switch (param_x) {
 
@@ -1870,7 +1864,7 @@ void draw_sample_bars() {
 	
 	//Volume area to scroll is (x1,y1,x2,y2) 
 
-	set_graphics_window(8,228,152,213); //Left, bottom, right, top, remember
+	set_graphics_window(8,228,152,214); //Left, bottom, right, top, remember
 
 	//Workaround for scrolling bug
 	set_graphics_foreground(7);
