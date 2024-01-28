@@ -1239,6 +1239,7 @@ void handle_breaks() {
 
 		if (mod.current_order > mod.header.num_orders - 1) mod.current_order = 0; //Handle 0x0D at end of a song.
 		mod.current_row = mod.new_row;
+		if (mod.current_row < 63) mod.current_order++;
 		mod.pattern_break_pending = false;
 
 	}
@@ -2270,7 +2271,7 @@ int main(int argc, char * argv[])
 			update_viz();
 			#endif			
 
-			if (mod.current_row == 64) {
+			if (mod.current_row == 64 && !(mod.order_break_pending || mod.order_break_pending)) {
 
 				mod.current_order++;
 				if (mod.current_order == mod.header.num_orders) mod.current_order = 0;
