@@ -7,6 +7,8 @@
 #include <string.h>
 #include <mos_api.h>
 
+#define VERSION 10
+
 //Settings
 
 //#define VARIABLE_RATE //Enables variable system sample rate setting based on channel count - does not work reliably on < C8 2.5.0
@@ -15,10 +17,15 @@
 #define RATE_8_CHAN 8192
 
 #define VERBOSE //Enables visual output, otherwise compiles to play "headless"
+//#define VIZ //Crude visualation
 //#define PRINT_DEBUG //Enables debug output to "printer" requiring C8 firmware 2.5.0+
 
+#if defined(VIZ) && defined(VERBOSE)
+    #error "VIZ and VERBOSE cannot both be defined."
+#endif
+
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
-#define PD_HZ 223000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
+#define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
 #define MAX_CHANNELS 8
 
@@ -939,7 +946,8 @@ const char* period_to_note(uint16_t period) {
 void handle_exit(const char* exit_message, bool tidy) {
 
 	if (mod.channels) for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
-	for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
+	if (mod.channels) for (uint8_t i = 0; i < mod.channels; i++) set_volume(i, 0); //Workaround for emulator bug
+	if (mod.sample_total) for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
 
 	if (channels_data != NULL) free(channels_data);
 
@@ -951,7 +959,7 @@ void handle_exit(const char* exit_message, bool tidy) {
 	set_channel_rate(-1, 16384);
 	#endif
 
-	#ifdef VERBOSE
+	#if defined(VIZ) || defined(VERBOSE)
 
 		clear_assets();
 
@@ -1049,8 +1057,8 @@ void fill_empty(uint8_t rows) {
 
 void dispatch_channel(uint8_t i) {
 		
-		if ((channels_data[i].current_effect == EFFECT_EXTENDED) && ((channels_data[i].current_effect_param >> 4) == EXT_DELAY_NOTE) && mod.tick_no < (channels_data[i].current_effect_param & 0x0F)) {
-			set_volume(i, 0);
+		if ((channels_data[i].current_effect == EFFECT_EXTENDED) && ((channels_data[i].current_effect_param >> 4) == EXT_DELAY_NOTE) && mod.tick_no != (channels_data[i].current_effect_param & 0x0F)) {
+			//set_volume(i, 0);
 			//printf("\r\nOn tick %u, delaying until tick %u\r\n", mod.tick_no, channels_data[i].current_effect_param & 0x0F);
 			return;
 		}
@@ -1118,22 +1126,26 @@ void pitch_slide(uint8_t i) {
 
 				if (channels_data[i].tuned_period + channels_data[i].slide_rate >= channels_data[i].target_period) {
 					channels_data[i].tuned_period = channels_data[i].target_period;
-					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+					set_frequency(i, channels_data[i].current_hz);
 					channels_data[i].target_period = 0;
 				} else {
 					channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + channels_data[i].slide_rate);
-					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+					set_frequency(i, channels_data[i].current_hz);
 				}
 
 			} else if (channels_data[i].target_period < channels_data[i].tuned_period) {
 
 				if (channels_data[i].tuned_period - channels_data[i].slide_rate <= channels_data[i].target_period) {
 					channels_data[i].tuned_period = channels_data[i].target_period;
-					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+					set_frequency(i, channels_data[i].current_hz);
 					channels_data[i].target_period = 0;
 				} else {
 					channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period - channels_data[i].slide_rate);
-					set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+					channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+					set_frequency(i, channels_data[i].current_hz);
 				}
 
 			} 
@@ -1141,7 +1153,8 @@ void pitch_slide(uint8_t i) {
 			if (channels_data[i].target_period == channels_data[i].tuned_period) {
 
 				channels_data[i].target_period = 0;
-				set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);
+				channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+				set_frequency(i, channels_data[i].current_hz);				
 
 			}
 
@@ -1158,7 +1171,8 @@ void pitch_slide(uint8_t i) {
 		else if ((channels_data[i].current_effect == EFFECT_EXTENDED) && channels_data[i].current_effect_param >> 4 == EXT_PORTA_DOWN) magnitude = channels_data[i].current_effect_param & 0x0F;	
 
 		channels_data[i].tuned_period = clamp_period(channels_data[i].tuned_period + magnitude);
-		set_frequency(i, mod.pd_hz / channels_data[i].tuned_period);	
+		channels_data[i].current_hz = mod.pd_hz / channels_data[i].tuned_period;
+		set_frequency(i, channels_data[i].current_hz);
 
 	}
 
@@ -1170,8 +1184,14 @@ void do_vibrato(uint8_t i) {
 	delta *= channels_data[i].vibrato_depth;
 	delta >>= 7; //Divide by 128
 
-	if (channels_data[i].vibrato_position < 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period - delta));
-	else if (channels_data[i].vibrato_position >= 0) set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period + delta));					
+	if (channels_data[i].vibrato_position < 0) {
+		channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].tuned_period + delta);
+		set_frequency(i, channels_data[i].current_hz);
+	}
+	else if (channels_data[i].vibrato_position >= 0) {
+		channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].tuned_period + delta);
+		set_frequency(i, channels_data[i].current_hz);
+	}
 
 	//printf("\r\nVibrato on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].vibrato_speed, channels_data[i].vibrato_depth, channels_data[i].vibrato_position, delta);
 
@@ -1200,13 +1220,38 @@ void do_tremulo(uint8_t i) {
 
 }
 
-void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
+void handle_breaks() {
 
+	if (mod.order_break_pending && mod.order_break_pending) { //Combined order and pattern breaks (0x0B and 0x0D on the same row)
+
+		mod.current_order = mod.new_order;
+		mod.current_row = mod.new_row;
+		mod.order_break_pending = false;
+		mod.pattern_break_pending = false;
+		
+	} else if (mod.order_break_pending) { //Just an order break (0x0B)
+
+		mod.current_order = mod.new_order;
+		mod.current_row = 0;
+		mod.order_break_pending = false;
+
+	} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
+
+		mod.current_order++;
+		mod.current_row = mod.new_row;
+		mod.pattern_break_pending = false;
+
+	}
+
+}
+
+void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
+	
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
 	uint8_t *noteData = buffer + offset;
 
-	mod.tick_no = 0;
+	mod.tick_no = 0;		
 
 	//mod.pattern_break_pending = false;
 
@@ -1430,27 +1475,32 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 						} break;		
 
-						case EXT_LOOP: {//Set waveform (tremolo)
+						case EXT_LOOP: {//Set or begin loop at row X
 
 							if (param_y == 0) {
 								channels_data[i].loop_row = mod.current_row - 1;
+								//printf("\r\nLoop set at row %u\r\n", channels_data[i].loop_row);
 								//printf("\r\nLogged row %u as the start of a future loop\r\n", mod.loop_row);
 							}
 
 							else {
 
 								if (!channels_data[i].loop_live) {
-									
-									channels_data[i].loop_count = param_y - 1;
+
+									channels_data[i].loop_count = param_y;
 									channels_data[i].loop_live = true;
 									mod.current_row = channels_data[i].loop_row;
+									//printf("\r\nLoop now starting, returning to row %u %u times\r\n", channels_data[i].loop_row, channels_data[i].loop_count);
 
-								} else {
+								} else if (channels_data[i].loop_live) {
 
 									channels_data[i].loop_count--;
+									//printf("\r\nLooped, %u to go\r\n", channels_data[i].loop_count);
 
 									if (channels_data[i].loop_count == 0) {
 										
+										//printf("\r\nReached 0, ending loop\r\n");
+
 										channels_data[i].loop_live = false;
 
 									} else mod.current_row = channels_data[i].loop_row;
@@ -1596,13 +1646,16 @@ void process_tick() {
 
 					uint8_t r = mod.tick_no % 3;
 					if (r == 0) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period));
+						channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].tuned_period);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 					else if (r == 1) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (x * 8));
+						channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (x * 8);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 					else if (r == 2) {
-						set_frequency(i, mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (y * 8));
+						channels_data[i].current_hz = mod.pd_hz / clamp_period(channels_data[i].tuned_period) + (y * 8);
+						set_frequency(i, channels_data[i].current_hz);
 					}
 
 				} break;
@@ -1857,6 +1910,42 @@ void draw_sample_bars() {
 
 }
 
+void update_viz() {
+    putch(0x0C); // Clear Screen (CLS)
+
+    // Calculate the width of each line
+    uint8_t line_width = 2;
+    uint16_t available_width = 320;
+    uint16_t total_line_width = mod.channels * line_width;
+    
+    // Calculate the spacing between lines so they are centered
+    uint16_t spacing_between_lines = (available_width - total_line_width) / (mod.channels + 1);
+
+    for (uint8_t i = 0; i < mod.channels; i++) {
+        
+		uint8_t vol = channels_data[i].current_volume;
+		if (vol < 2) vol = 2;
+		if (vol > 64) vol = 64;
+		vol *= 2;
+
+		uint16_t line_start_x = spacing_between_lines + i * (line_width + spacing_between_lines);
+        uint16_t line_end_x = line_start_x + line_width;
+        
+        // Ensure the values are within screen dimensions
+        if (line_start_x >= 0 && line_end_x <= available_width) {
+            set_graphics_foreground(15);
+			draw_rect(line_start_x, 40, line_end_x, 180);
+			
+			set_graphics_foreground(15 + channels_data[i].latched_sample);
+			draw_rect(line_start_x - 8, 171 - vol, line_end_x + 8, 177 - vol);
+
+        }
+    }
+
+	switch_buffers();
+
+}
+
 int main(int argc, char * argv[])       
 {
 
@@ -1893,6 +1982,7 @@ int main(int argc, char * argv[])
 		return 0;
     }
 	
+	printf("Agon_MOD (v%03u)\r\n", VERSION);	
 	printf("Reading .MOD header\r\n");
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
@@ -1933,10 +2023,12 @@ int main(int argc, char * argv[])
 		enable_channel(i);
 		reset_channel(i);
 		set_volume(i, 0);
+		set_frequency(i, 0);
 		//channels_data[i].latched_sample = 0;
 		//channels_data[i].latched_volume = 0;
 		channels_data[i].current_volume = 0;
 		channels_data[i].current_effect = 0xFF;
+		channels_data[i].loop_live = false;
 		//channels_data[i].current_effect_param = 0;
 		channels_data[i].vibrato_retrigger = true;
 		channels_data[i].tremolo_retrigger = true;		
@@ -1947,6 +2039,7 @@ int main(int argc, char * argv[])
 	mod.current_bpm = 125;
 
 	if (argc >= 5) mod.current_order = atoi(argv[4]) - 1;
+	else mod.current_order = 0;
 
 	ticker = 0;
 	timer_begin(TIMER_NO, rr_array[mod.current_bpm - 0x20], div_array[mod.current_bpm - 0x20]);
@@ -1966,8 +2059,6 @@ int main(int argc, char * argv[])
 
 	uint8_t *temp_sample_buffer;
 	//mod.sample_total = 0;
-	
-	printf("Uploading sample data...");
 
 	for (uint8_t i = 1; i < 31; i++) {
 
@@ -2039,7 +2130,7 @@ int main(int argc, char * argv[])
 
 			}
 
-			printf("%02u..", i);
+			printf("\rUploading sample: %02u", i);
 
 		} else mod.sample_live[i] = false;
 
@@ -2071,7 +2162,7 @@ int main(int argc, char * argv[])
 		//left, bottom, right, top
 		set_text_window(0,29,22,1);
 
-		printf("Agon_MOD");
+		printf("Agon_MOD (v%03u)", VERSION);
 		if (mod.pd_hz != PD_HZ) printf(" [%06u]", mod.pd_hz);
 		printf("\r\n\r\n");
 		printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
@@ -2108,10 +2199,31 @@ int main(int argc, char * argv[])
 
 	#endif
 
+	#ifdef VIZ
+	
+		old_mode = sv->scrMode;
+
+		if (sv->scrMode != 12) {
+			putch(22);
+			putch(12);
+		}
+
+		logical_coords(false);
+
+		putch(0x0C); //CLS
+	
+	#endif
+
 	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
+	#if !defined(VERBOSE) && !defined(VIZ)
+	printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+	#endif
 
 	#ifdef VERBOSE
 	draw_sample_bars();
+	#endif
+	#ifdef VIZ
+	update_viz();
 	#endif
 
 	uint24_t tick = 0;
@@ -2126,17 +2238,15 @@ int main(int argc, char * argv[])
 
 			if (sv->vkeycount != old_key_count) {
 
-				if (sv->keyascii == 27) {
+				if (sv->keyascii == 27 || sv->keyascii == 'q') {
 					break;
 				}
 
-				else if (sv->keyascii == 'q') {
-					break;
-				}
-
+				#ifdef VERBOSE
 				else if (sv->keyascii == '`') {
 					return 0; //To stop dead and examine the rows.
-				}				
+				}			
+				#endif	
 
 				else if (sv->keyascii == '+') {
 					global_volume += 5;
@@ -2151,34 +2261,20 @@ int main(int argc, char * argv[])
 
 				old_key_count = sv->vkeycount;
 
-			}
+			}		
 
-			if (mod.order_break_pending && mod.order_break_pending) { //Combined order and pattern breaks (0x0B and 0x0D on the same row)
-
-				mod.current_order = mod.new_order;
-				mod.current_row = mod.new_row;
-				mod.order_break_pending = false;
-				mod.pattern_break_pending = false;
-				
-			} else if (mod.order_break_pending) { //Just an order break (0x0B)
-
-				mod.current_order = mod.new_order;
-				mod.current_row = 0;
-				mod.order_break_pending = false;
-
-			} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
-
-				mod.current_order++;
-				mod.current_row = mod.new_row;
-				mod.pattern_break_pending = false;
-
-			}			
-
-			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
+			handle_breaks();
+			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);		
+			#if !defined(VERBOSE) && !defined(VIZ)
+			printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+			#endif
 			
 			#ifdef VERBOSE
 			draw_sample_bars();
 			#endif
+			#ifdef VIZ
+			update_viz();
+			#endif			
 
 			if (mod.current_row == 64) {
 
@@ -2187,7 +2283,6 @@ int main(int argc, char * argv[])
 				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
 				//header_line();
 				mod.current_row = 0;
-
 			}
 
 		} else if (ticker - tick > 0) { //We're in between rows
@@ -2200,12 +2295,18 @@ int main(int argc, char * argv[])
 				#ifdef VERBOSE
 				draw_sample_bars();
 				#endif
+				// #ifdef VIZ
+				// update_viz();
+				// #endif					
 
 			}
 
 		}
 	
 	}
+	#if !defined(VERBOSE) && !defined(VIZ)
+	printf("\r\n");
+	#endif
 
 	handle_exit(NULL, true);
 	return 0;
