@@ -1237,8 +1237,7 @@ void handle_breaks() {
 
 	} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
 
-		mod.current_order++;
-		if (mod.current_order > mod.header.num_orders - 1) mod.current_order = 0; //Handle 0x0D at end of song.
+		if (mod.current_order > mod.header.num_orders - 1) mod.current_order = 0; //Handle 0x0D at end of a song.
 		mod.current_row = mod.new_row;
 		mod.pattern_break_pending = false;
 
