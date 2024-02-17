@@ -7,7 +7,7 @@
 #include <string.h>
 #include <mos_api.h>
 
-#define VERSION 10
+#define VERSION 11
 
 //Settings
 
@@ -16,14 +16,17 @@
 #define RATE_6_CHAN 24576
 #define RATE_8_CHAN 8192
 
-#define VERBOSE //Enables visual output, otherwise compiles to play "headless"
+//#define HEADLESS //Will dump out into MOS after beginning to play - unstable!
+#define VERBOSE //Enables normal visual tracker-style output
 //#define VIZ //Crude visualation
-//#define PRINT_DEBUG //Enables debug output to "printer" requiring C8 firmware 2.5.0+
+//#define PRINT_DEBUG //Enables debug output to "printer" requiring C8 firmware 2.5.0
 
 #if defined(VIZ) && defined(VERBOSE)
     #error "VIZ and VERBOSE cannot both be defined."
 #endif
 
+#define BUFFER_FLOOR 0x0000
+#define START_DELAY 0
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
 #define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
@@ -179,10 +182,15 @@ uint8_t sine_table[] = {
 #pragma pack(pop)
 
 static mod_header mod;
-static channel_data *channels_data = NULL;
+//static channel_data *channels_data = NULL;
+static channel_data channels_data[8];
 static FILE *file;
 static uint8_t old_mode;
 static int16_t global_volume = 100;
+static uint24_t old_ticker = 0;
+static uint24_t tick = 0;
+static uint24_t mid_tick = 0;
+static bool mod_ready = false;
 
 // Parameters:
 // - argc: Argument count
@@ -304,12 +312,6 @@ uint32_t swap32(uint32_t num) {
 
 }
 
-void on_tick()
-{
-	ticker++;
-
-}
-
 void write16bit(uint16_t w)
 {
 	putch(w & 0xFF); // write LSB
@@ -343,7 +345,7 @@ void add_stream_to_buffer(uint16_t buffer_id, char* buffer_content, uint16_t buf
 	putch(23);
 	putch(0);
 	putch(0xA0);
-	write16bit(buffer_id);
+	write16bit(BUFFER_FLOOR + buffer_id);
 	putch(0);
 	write16bit(buffer_size);
 	
@@ -365,7 +367,7 @@ void sample_from_buffer(uint16_t buffer_id, uint8_t format) {
 	putch(0);
 	putch(5);
 	putch(2);
-	write16bit(buffer_id);
+	write16bit(BUFFER_FLOOR + buffer_id);
 	putch(format);
 
 }
@@ -383,7 +385,7 @@ void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
 	putch(0); //Ignored
 	putch(5);
 	putch(2);
-	write16bit(buffer_id);
+	write16bit(BUFFER_FLOOR + buffer_id);
 	putch(24);
 	write16bit(frequency);
 
@@ -393,6 +395,17 @@ void tuneable_sample_from_buffer(uint16_t buffer_id, uint16_t frequency) {
 //     char buffer[11] = {23, 0, 0x85, 0, 5, 2, buffer_id & 0xFF, buffer_id >> 8, 24, frequency & 0xFF, frequency >> 8};
 //     mos_puts(buffer, 11, 0);
 // }
+
+void disable_channel(uint8_t channel) {
+
+	//VDU 23, 0, &85, channel, 9
+	putch(23);
+	putch(0);
+	putch(0x85);
+	putch(channel);
+	putch(9);
+
+}
 
 void enable_channel(uint8_t channel) {
 
@@ -418,7 +431,7 @@ void assign_sample_to_channel(uint16_t sample_id, uint8_t channel_id) {
 	putch(channel_id);
 	putch(4);
 	putch(8);
-	write16bit(sample_id);
+	write16bit(BUFFER_FLOOR + sample_id);
 	
 }
 
@@ -645,7 +658,7 @@ void clear_buffer(uint16_t buffer_id) {
 	putch(23);
 	putch(0);
 	putch(0xA0);
-	write16bit(buffer_id);
+	write16bit(BUFFER_FLOOR + buffer_id);
 	putch(2);
 	
 }
@@ -664,7 +677,7 @@ void set_sample_frequency(uint16_t buffer_id, uint16_t frequency) {
 	putch(0); //Ignored channel
 	putch(5);
 	putch(4);
-	write16bit(buffer_id);
+	write16bit(BUFFER_FLOOR + buffer_id);
 	write16bit(frequency);
 	
 }
@@ -705,7 +718,7 @@ void reset_channel(uint8_t channel) {
 //     mos_puts(buffer, 5, 0);
 // }
 
-void set_sample_duration_and_play(uint8_t channel, uint24_t duration) {
+void set_sample_duration(uint8_t channel, uint24_t duration) {
 	
 	putch(23);
 	putch(0);
@@ -737,7 +750,7 @@ void set_sample_loop_start(uint16_t sample_id, uint24_t start) {
 	putch(0);
 	putch(5);
 	putch(6);
-	write16bit(sample_id);
+	write16bit(BUFFER_FLOOR + sample_id);
 	write24bit(start);
 
 }
@@ -774,7 +787,7 @@ void set_sample_loop_length(uint16_t sample_id, uint24_t length) {
 	putch(0);
 	putch(5);
 	putch(8);
-	write16bit(sample_id);
+	write16bit(BUFFER_FLOOR + sample_id);
 	write24bit(length);
 
 }
@@ -821,6 +834,16 @@ void cursor_tab(uint8_t x, uint8_t y) {
 	putch(0x1F);
 	putch(x);
 	putch(y);
+
+}
+
+void cursor_set(bool state) {
+
+	//VDU 23, 1, n
+
+	putch(23);
+	putch(1);
+	putch(state);
 
 }
 
@@ -945,15 +968,13 @@ const char* period_to_note(uint16_t period) {
 
 void handle_exit(const char* exit_message, bool tidy) {
 
-	if (mod.channels) for (uint8_t i = 0; i < mod.channels; i++) reset_channel(i);
-	if (mod.channels) for (uint8_t i = 0; i < mod.channels; i++) set_volume(i, 0); //Workaround for emulator bug
-	if (mod.sample_total) for (uint8_t i = 1; i < mod.sample_total; i++) if (mod.sample_live[i]) clear_buffer(i);
+	for (uint8_t i = 0; i < 8; i++) reset_channel(i);
 
-	if (channels_data != NULL) free(channels_data);
+	timer_end(TIMER_NO);
+
+	//if (channels_data != NULL) free(channels_data);
 
 	if (file != NULL) fclose(file);
-	
-	timer_end(TIMER_NO);
 
 	#ifdef VARIABLE_RATE
 	set_channel_rate(-1, 16384);
@@ -985,6 +1006,14 @@ void handle_exit(const char* exit_message, bool tidy) {
 
 }
 
+// static inline uint16_t max(uint16_t a, uint16_t b) {
+//     return (a > b) ? a : b;
+// }
+
+// static inline uint16_t min(uint16_t a, uint16_t b) {
+//     return (a < b) ? a : b;
+// }
+
 uint16_t clamp_period(uint16_t period) {
     if (period <= AMIGA_PERIOD_MIN) return AMIGA_PERIOD_MIN;
     else if (period >= AMIGA_PERIOD_MAX) return AMIGA_PERIOD_MAX;
@@ -997,8 +1026,9 @@ uint8_t clamp_volume(int8_t volume) {
     else return volume;
 }
 
-int scale_volume(int original_volume) {
-    return (original_volume * 127) / 64;
+uint8_t scale_volume(int original_volume) {
+    int scaled_volume = (original_volume * 127) + 63;
+    return scaled_volume / 64;
 }
 
 void fill_empty(uint8_t rows) {
@@ -1050,6 +1080,7 @@ void fill_empty(uint8_t rows) {
 			putch(17);
 			putch(18); //Manual fix for colour black
 			printf(" --- --");
+			printf("\r\n");
 		}
 	}
 
@@ -1206,12 +1237,14 @@ void do_tremulo(uint8_t i) {
 	delta *= channels_data[i].tremolo_depth;
 	delta >>= 6; //Divide by 64
 
-	if (channels_data[i].tremolo_position < 0) set_volume(i, scale_volume(channels_data[i].current_volume - (delta)));
-	else if (channels_data[i].tremolo_position >= 0) set_volume(i, scale_volume(channels_data[i].current_volume + (delta)));
-	if (channels_data[i].current_volume > 64) channels_data[i].current_volume = 64;
-	if (channels_data[i].current_volume < 0) channels_data[i].current_volume = 0;
-	
-	mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
+	if (channels_data[i].tremolo_position < 0) {
+		set_volume(i, scale_volume(clamp_volume(channels_data[i].current_volume - (delta))));
+		mod.sample_volume[channels_data[i].latched_sample] = clamp_volume(channels_data[i].current_volume - (delta));
+	}
+	else if (channels_data[i].tremolo_position >= 0) {
+		set_volume(i, scale_volume(clamp_volume(channels_data[i].current_volume + (delta))));
+		mod.sample_volume[channels_data[i].latched_sample] = clamp_volume(channels_data[i].current_volume + (delta));
+	}
 
 	//printf("\r\nTremolo on %u with speed %u and depth %u, sine pos %i meaning delta %u.", i, channels_data[i].tremolo_speed, channels_data[i].tremolo_depth, channels_data[i].tremolo_position, delta);
 
@@ -1246,11 +1279,13 @@ void handle_breaks() {
 
 }
 
-void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
+void process_note(size_t pattern_no, size_t row)  {
 	
 	size_t offset = (mod.channels * 4 * 64) * pattern_no + (row * 4 * mod.channels);
 
-	uint8_t *noteData = buffer + offset;
+	fseek(file, 1084 + offset, SEEK_SET);
+
+	//uint8_t *noteData = buffer + offset;
 
 	mod.tick_no = 0;		
 
@@ -1318,7 +1353,8 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 			//Move on to next channel/note in memory
 
-			noteData += 4;
+			//noteData += 4;
+			fseek(file, 4, SEEK_CUR);
 
 			continue;
 		}
@@ -1331,6 +1367,9 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 			putch(new_colour);
 			
 		#endif
+
+		uint8_t noteData[4];
+		fread(&noteData, sizeof(uint8_t), 4, file);
 
 		sample_number = (noteData[0] & 0xF0) + (noteData[2] >> 4);
 		effect_number = (noteData[2] & 0xF);
@@ -1432,7 +1471,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 				case EFFECT_VOL_SET: {//Set channel volume to xx
 
-					channels_data[i].current_volume = (channels_data[i].current_effect_param);
+					channels_data[i].current_volume = clamp_volume((channels_data[i].current_effect_param));
 					set_volume(i, scale_volume(channels_data[i].current_volume));
 					mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
 
@@ -1598,7 +1637,7 @@ void process_note(uint8_t *buffer, size_t pattern_no, size_t row)  {
 
 		//Move on to next channel/note in memory
 
-		noteData += 4;
+		//noteData += 4;
 
 	}
 
@@ -1941,11 +1980,70 @@ void update_viz() {
 
 }
 
+void on_tick()
+{
+	ticker++;
+
+	if (mod_ready && ticker >= START_DELAY) {
+
+		if ((ticker - old_ticker) >= mod.current_speed) {
+
+			old_ticker = ticker, tick = ticker;
+			mid_tick = 0;
+
+			handle_breaks();
+			process_note(mod.header.order[mod.current_order], mod.current_row++);		
+			#if !defined(VERBOSE) && !defined(VIZ) && !defined(HEADLESS)
+			printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+			#endif
+			
+			#ifdef VERBOSE
+			draw_sample_bars();
+			#endif
+			#ifdef VIZ
+			update_viz();
+			#endif			
+
+			if (mod.current_row == 64 && !(mod.order_break_pending)) {
+
+				mod.current_order++;
+				if ((mod.current_order) > mod.header.num_orders - 1) mod.current_order = 0;
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				//header_line();
+				mod.current_row = 0;
+			}
+
+		} else if (ticker - tick > 0) { //We're in between rows
+
+			if (mid_tick++ < mod.current_speed) {
+
+				tick = ticker;
+				mod.tick_no++;
+				process_tick();
+				#ifdef VERBOSE
+				draw_sample_bars();
+				#endif				
+
+			}
+
+		}	
+
+	}
+
+}
+
 int main(int argc, char * argv[])       
 {
 
 	sv = vdp_vdu_init();
 	if ( vdp_key_init() == -1 ) return 1;
+
+	#ifdef HEADLESS
+	if (strncmp(argv[1], "STOP", 4) == 0 || strncmp(argv[1], "stop", 4) == 0) {
+		handle_exit(NULL, false);
+		return 0;
+	}
+	#endif
 
 	#ifdef PRINT_DEBUG
 	print_to_debug("\r\nDebug starting.\r\n");
@@ -1977,8 +2075,10 @@ int main(int argc, char * argv[])
 		return 0;
     }
 	
+	#ifndef HEADLESS
 	printf("Agon_MOD (v%03u)\r\n", VERSION);	
 	printf("Reading .MOD header\r\n");
+	#endif
 
 	fread(&mod.header, sizeof(mod_file_header), 1, file);
 
@@ -2013,23 +2113,21 @@ int main(int argc, char * argv[])
 
 	}
 
-	channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
+	//channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
+	//channel_data channels_data[8];
+	
 	for (uint8_t i = 0; i < mod.channels; i++) {
 		enable_channel(i);
 		reset_channel(i);
 		set_volume(i, 0);
 		set_frequency(i, 0);
-		//channels_data[i].latched_sample = 0;
-		//channels_data[i].latched_volume = 0;
 		channels_data[i].current_volume = 0;
 		channels_data[i].current_effect = 0xFF;
 		channels_data[i].loop_live = false;
-		//channels_data[i].current_effect_param = 0;
 		channels_data[i].vibrato_retrigger = true;
 		channels_data[i].tremolo_retrigger = true;		
 		
 	}
-	//mod.pattern_max = 0;
 	mod.current_speed = 6;
 	mod.current_bpm = 125;
 
@@ -2046,13 +2144,16 @@ int main(int argc, char * argv[])
 
 	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
 
+	#ifndef HEADLESS
 	printf("Reading pattern data...\r\n");
+	#endif
 
 	//Number of patterns * number of channels * number of bytes per note per channel * number of notes per pattern (i.e. 1024 bytes per 4 channel pattern)
-	mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
-	fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
+	//mod.pattern_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (mod.pattern_max + 1) * mod.channels * 4 * 64);
+	//fread(mod.pattern_buffer, sizeof(uint8_t), (mod.pattern_max + 1) * mod.channels * 4 * 64, file);
+	fseek(file, (mod.pattern_max + 1) * mod.channels * 4 * 64, SEEK_CUR);
 
-	uint8_t *temp_sample_buffer;
+	//uint8_t *temp_sample_buffer;
 	//mod.sample_total = 0;
 
 	for (uint8_t i = 1; i < 31; i++) {
@@ -2078,14 +2179,16 @@ int main(int argc, char * argv[])
 
 			//if ((sample_length_swapped * 2) < 300) mod.bad_samples = true;
 
+			uint8_t temp_sample_buffer[256];
+
 			if ((sample_length_swapped * 2) <= CHUNK_SIZE) {
 
 				clear_buffer(i);
-				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (sample_length_swapped * 2));
-				if (temp_sample_buffer == NULL) {
-					handle_exit("Local sample memory allocation failed", false);
-					return 0;	
-				}
+				// temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * (sample_length_swapped * 2));
+				// if (temp_sample_buffer == NULL) {
+				// 	handle_exit("Local sample memory allocation failed", false);
+				// 	return 0;	
+				// }
 				fread(temp_sample_buffer, sizeof(uint8_t), (sample_length_swapped * 2), file);
 				add_stream_to_buffer(i, (char *)temp_sample_buffer, (sample_length_swapped * 2));		
 
@@ -2095,11 +2198,11 @@ int main(int argc, char * argv[])
 				uint16_t chunk;
 
 				clear_buffer(i);
-				temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
-				if (temp_sample_buffer == NULL) {
-					handle_exit("Local sample memory allocation failed", false);
-					return 0;	
-				}
+				// temp_sample_buffer = (uint8_t*) malloc(sizeof(uint8_t) * CHUNK_SIZE);
+				// if (temp_sample_buffer == NULL) {
+				// 	handle_exit("Local sample memory allocation failed", false);
+				// 	return 0;	
+				// }
 
 				while (remaining_data > 0) {
 					
@@ -2125,17 +2228,21 @@ int main(int argc, char * argv[])
 
 			}
 
+			#ifndef HEADLESS
 			printf("\rUploading sample: %02u", i);
+			#endif
 
 		} else mod.sample_live[i] = false;
 
 	}
 
+	#ifndef HEADLESS
 	printf("\r\n");
+	#endif
 
-	free(temp_sample_buffer);
+	//free(temp_sample_buffer);
 	
-	uint24_t old_ticker = ticker;
+	old_ticker = ticker;
 	uint16_t old_key_count = sv->vkeycount;
 
 	set_volume(255, global_volume);
@@ -2152,6 +2259,7 @@ int main(int argc, char * argv[])
 		logical_coords(false);
 
 		putch(0x0C); //CLS
+		cursor_set(false);
 
 		//Set up the UI
 		//left, bottom, right, top
@@ -2209,10 +2317,10 @@ int main(int argc, char * argv[])
 	
 	#endif
 
-	process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);
-	#if !defined(VERBOSE) && !defined(VIZ)
-	printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
-	#endif
+	//process_note(mod.header.order[mod.current_order], mod.current_row++);
+	// #if !defined(VERBOSE) && !defined(VIZ) && !defined(HEADLESS)
+	// printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+	// #endif
 
 	#ifdef VERBOSE
 	draw_sample_bars();
@@ -2221,89 +2329,47 @@ int main(int argc, char * argv[])
 	update_viz();
 	#endif
 
-	uint24_t tick = 0;
-	uint8_t mid_tick;
+	tick = 0;
+
+	mod_ready = true;
+
+	#ifdef HEADLESS
+	return 0;
+	#endif
 
 	while (1) {
 
-		if ((ticker - old_ticker) >= mod.current_speed) {
+		if (sv->vkeycount != old_key_count) {
 
-			old_ticker = ticker, tick = ticker;
-			mid_tick = 0;
-
-			if (sv->vkeycount != old_key_count) {
-
-				if (sv->keyascii == 27 || sv->keyascii == 'q') {
-					break;
-				}
-
-				#ifdef VERBOSE
-				else if (sv->keyascii == '`') {
-					return 0; //To stop dead and examine the rows.
-				}			
-				#endif	
-
-				else if (sv->keyascii == '+') {
-					global_volume += 5;
-					if (global_volume > 127) global_volume = 127;
-					set_volume(255, global_volume);
-				}
-				else if (sv->keyascii == '-') {
-					global_volume -= 5;
-					if (global_volume < 0) global_volume = 0;
-					set_volume(255, global_volume);
-				}
-
-				old_key_count = sv->vkeycount;
-
-			}		
-
-			handle_breaks();
-			process_note(mod.pattern_buffer, mod.header.order[mod.current_order], mod.current_row++);		
-			#if !defined(VERBOSE) && !defined(VIZ)
-			printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
-			#endif
-			
-			#ifdef VERBOSE
-			draw_sample_bars();
-			#endif
-			#ifdef VIZ
-			update_viz();
-			#endif			
-
-			if (mod.current_row == 64 && !(mod.order_break_pending || mod.order_break_pending)) {
-
-				mod.current_order++;
-				if (mod.current_order == mod.header.num_orders) mod.current_order = 0;
-				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
-				//header_line();
-				mod.current_row = 0;
+			if (sv->keyascii == 27 || sv->keyascii == 'q') {
+				timer_end(TIMER_NO);
+				break;
 			}
 
-		} else if (ticker - tick > 0) { //We're in between rows
-
-			if (mid_tick++ < mod.current_speed) {
-
-				tick = ticker;
-				mod.tick_no++;
-				process_tick();
-				#ifdef VERBOSE
-				draw_sample_bars();
-				#endif
-				// #ifdef VIZ
-				// update_viz();
-				// #endif					
-
+			else if (sv->keyascii == '+') {
+				global_volume += 5;
+				if (global_volume > 125) global_volume = 125;
+				set_volume(255, global_volume);
+			}
+			else if (sv->keyascii == '-') {
+				global_volume -= 5;
+				if (global_volume < 0) global_volume = 0;
+				set_volume(255, global_volume);
 			}
 
-		}
+			old_key_count = sv->vkeycount;
+
+			}	
 	
 	}
-	#if !defined(VERBOSE) && !defined(VIZ)
+	#if !defined(VERBOSE) && !defined(VIZ) && !defined(HEADLESS)
 	printf("\r\n");
 	#endif
 
+	#if defined(VERBOSE) || defined(VIZ)
 	handle_exit(NULL, true);
+	#endif
+
 	return 0;
 
 }
