@@ -174,24 +174,22 @@ typedef struct {
 
 //S3M structures
 typedef struct {
-	char name[28];
-	uint8_t type;
-	uint16_t reserved;
-	uint16_t num_orders;
-	uint16_t num_instruments;
-	uint16_t num_patterns;
-	uint16_t flags;
-	uint16_t tracker_version;
-	uint16_t file_version;
-	uint8_t global_volume;
-	uint8_t initial_speed;
-	uint8_t initial_tempo;
-	uint8_t master_volume;
-	uint8_t ultra_click_removal;
-	uint8_t default_pan;
-	uint8_t reserved2[8];
-	uint8_t special;
-	char sig[4];
+	char name[28];           // 0x00-0x1B: Song name
+	uint8_t type;            // 0x1C: Type (0x10 = S3M)
+	uint16_t reserved;       // 0x1D-0x1E: Reserved
+	uint16_t num_orders;     // 0x1F-0x20: Number of orders
+	uint16_t num_instruments; // 0x21-0x22: Number of instruments
+	uint16_t num_patterns;   // 0x23-0x24: Number of patterns
+	uint16_t flags;          // 0x25-0x26: Flags
+	uint16_t tracker_version; // 0x27-0x28: Tracker version
+	uint16_t file_version;   // 0x29-0x2A: File version
+	uint8_t global_volume;   // 0x2B: Global volume
+	char sig[4];             // 0x2C-0x2F: Signature "SCRM"
+	uint8_t master_volume;   // 0x30: Master volume
+	uint8_t ultra_click_removal; // 0x31: Ultra click removal
+	uint8_t default_pan;     // 0x32: Default pan
+	uint8_t reserved2[8];    // 0x33-0x3A: Reserved
+	uint8_t special;         // 0x3B: Special
 } s3m_file_header;
 
 typedef struct {
@@ -2256,12 +2254,54 @@ int main(int argc, char * argv[])
 		return 0;
     }
 	
+	// Detect file format
+	current_format = detect_file_format(argv[1]);
+	
 	#ifndef HEADLESS
 	printf("Agon_MOD (v%03u)\r\n", VERSION);	
-	printf("Reading .MOD header\r\n");
+	if (current_format == FORMAT_S3M) {
+		printf("Reading .S3M header\r\n");
+	} else {
+		printf("Reading .MOD header\r\n");
+	}
 	#endif
 
-	fread(&mod.header, sizeof(mod_file_header), 1, file);
+	if (current_format == FORMAT_S3M) {
+		// Handle S3M file
+		s3m_file_header s3m_header;
+		fread(&s3m_header, sizeof(s3m_file_header), 1, file);
+		
+		// Validate S3M signature
+		if (strncmp(s3m_header.sig, "SCRM", 4) != 0) {
+			handle_exit("Invalid S3M file signature.", false);
+			return 0;
+		}
+		
+		// Set basic parameters
+		mod.channels = 32; // S3M supports up to 32 channels
+		mod.current_speed = 6; // Default speed (will be updated when patterns are loaded)
+		mod.current_bpm = 125; // Default BPM (will be updated when patterns are loaded)
+		
+		#ifndef HEADLESS
+		printf("S3M: %s, %d channels, %d orders, %d patterns\r\n", 
+			s3m_header.name, mod.channels, s3m_header.num_orders, s3m_header.num_patterns);
+		#endif
+		
+		// TODO: Load S3M patterns and samples
+		// For now, just skip to end of file to avoid crashes
+		fseek(file, 0, SEEK_END);
+		long file_size = ftell(file);
+		#ifndef HEADLESS
+		printf("S3M file size: %ld bytes\r\n", file_size);
+		#endif
+		
+		// Set a default pattern for now
+		mod.pattern_max = 0;
+		mod.sample_total = 0;
+		
+	} else {
+		// Handle MOD file (existing code)
+		fread(&mod.header, sizeof(mod_file_header), 1, file);
 
 	if (strncmp(mod.header.sig, "M.K.", 4) == 0) {
 		mod.channels = 4; //Classic 4 channels
@@ -2296,21 +2336,6 @@ int main(int argc, char * argv[])
 
 	//channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
 	//channel_data channels_data[8];
-	
-	for (uint8_t i = 0; i < mod.channels; i++) {
-		enable_channel(i);
-		reset_channel(i);
-		set_volume(i, 0);
-		set_frequency(i, 0);
-		channels_data[i].current_volume = 0;
-		channels_data[i].current_effect = 0xFF;
-		channels_data[i].loop_live = false;
-		channels_data[i].vibrato_retrigger = true;
-		channels_data[i].tremolo_retrigger = true;		
-		
-	}
-	mod.current_speed = 6;
-	mod.current_bpm = 125;
 
 	if (argc >= 5) mod.current_order = atoi(argv[4]) - 1;
 	else mod.current_order = 0;
@@ -2420,6 +2445,30 @@ int main(int argc, char * argv[])
 	#ifndef HEADLESS
 	printf("\r\n");
 	#endif
+	} // End of MOD handling else block
+
+	// Initialize channels for both formats
+	//channels_data = (channel_data*) malloc(sizeof(channel_data) * mod.channels);
+	//channel_data channels_data[8];
+	
+	for (uint8_t i = 0; i < mod.channels; i++) {
+		enable_channel(i);
+		reset_channel(i);
+		set_volume(i, 0);
+		set_frequency(i, 0);
+		channels_data[i].current_volume = 0;
+		channels_data[i].current_effect = 0xFF;
+		channels_data[i].loop_live = false;
+		channels_data[i].vibrato_retrigger = true;
+		channels_data[i].tremolo_retrigger = true;		
+		
+	}
+
+	// Set default values if not already set by S3M
+	if (current_format == FORMAT_MOD) {
+		mod.current_speed = 6;
+		mod.current_bpm = 125;
+	}
 
 	//free(temp_sample_buffer);
 	
