@@ -30,7 +30,7 @@
 #define CHUNK_SIZE 256		//Sample upload chunk size in bytes
 #define PD_HZ 225000		//Magic number used to convert amiga periods to Agon frequencies (original 187815)
 #define TIMER_NO 5			//Timer block to use in ez80
-#define MAX_CHANNELS 8
+#define MAX_CHANNELS 32  // Extended to support S3M's 32 channels
 
 #define AMIGA_PERIOD_MAX 856		//Amiga period clamp maximum (finetune 0 = 856)
 #define AMIGA_PERIOD_MIN 113		//Amiga period clamp minimum (finetune 0 = 113)
@@ -67,6 +67,55 @@
 #define EXT_DELAY_NOTE		0x0D
 #define EXT_REPEAT_NOTE		0x0E
 
+//S3M defines
+
+#define S3M_EFFECT_ARPEGGIO		0x00
+#define S3M_EFFECT_SLIDE_UP		0x01
+#define S3M_EFFECT_SLIDE_DOWN	0x02
+#define S3M_EFFECT_TONE_PORTAMENTO	0x03
+#define S3M_EFFECT_VIBRATO		0x04
+#define S3M_EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE	0x05
+#define S3M_EFFECT_VIBRATO_VOLUME_SLIDE	0x06
+#define S3M_EFFECT_TREMOLO		0x07
+#define S3M_EFFECT_SET_PANNING	0x08
+#define S3M_EFFECT_OFFSET		0x09
+#define S3M_EFFECT_VOLUME_SLIDE	0x0A
+#define S3M_EFFECT_POSITION_JUMP	0x0B
+#define S3M_EFFECT_SET_VOLUME	0x0C
+#define S3M_EFFECT_PATTERN_BREAK	0x0D
+#define S3M_EFFECT_EXTENDED		0x0E
+#define S3M_EFFECT_SET_SPEED	0x0F
+#define S3M_EFFECT_SET_TEMPO	0x0F
+#define S3M_EFFECT_GLOBAL_VOLUME	0x10
+#define S3M_EFFECT_GLOBAL_VOLUME_SLIDE	0x11
+#define S3M_EFFECT_KEY_OFF		0x14
+#define S3M_EFFECT_SET_ENVELOPE_POSITION	0x15
+#define S3M_EFFECT_PANNING_SLIDE	0x19
+#define S3M_EFFECT_RETRIGGER	0x1B
+#define S3M_EFFECT_FINE_VIBRATO	0x1C
+#define S3M_EFFECT_FINE_SLIDE_UP	0x1D
+#define S3M_EFFECT_FINE_SLIDE_DOWN	0x1E
+#define S3M_EFFECT_SET_MODEL	0x1F
+#define S3M_EFFECT_TREMOR		0x20
+#define S3M_EFFECT_NONE			0xFF
+
+//S3M extended effects
+#define S3M_EXT_FILTER		0x00
+#define S3M_EXT_FINEPORTA_UP	0x01
+#define S3M_EXT_FINEPORTA_DOWN	0x02
+#define S3M_EXT_GLISSANDO_CONTROL	0x03
+#define S3M_EXT_VIBRATO_WAVE	0x04
+#define S3M_EXT_FINETUNE		0x05
+#define S3M_EXT_LOOP			0x06
+#define S3M_EXT_TREMOLO_WAVE	0x07
+#define S3M_EXT_RETRIGGER		0x09
+#define S3M_EXT_FINE_VOLUME_UP	0x0A
+#define S3M_EXT_FINE_VOLUME_DOWN	0x0B
+#define S3M_EXT_CUT_NOTE		0x0C
+#define S3M_EXT_DELAY_NOTE		0x0D
+#define S3M_EXT_PATTERN_DELAY	0x0E
+#define S3M_EXT_FUNK_REPEAT	0x0F
+
 //ez80 defines
 
 #define TMR0_CTL		0x80
@@ -79,6 +128,7 @@
 
 volatile void *timer_prevhandler;
 volatile uint24_t ticker = 0;
+file_format_t current_format = FORMAT_MOD;
 extern void timer_handler_0();
 extern void timer_handler_1();
 extern void timer_handler_2();
@@ -87,6 +137,16 @@ extern void timer_handler_4();
 extern void timer_handler_5();
 
 extern void uart0_fast_write(char *data, uint24_t length);
+
+//File format types
+typedef enum {
+	FORMAT_MOD,
+	FORMAT_S3M
+} file_format_t;
+
+//Function prototypes
+file_format_t detect_file_format(const char* filename);
+void convert_16bit_to_8bit(uint8_t* dest, const int16_t* src, uint16_t length);
 
 #pragma pack(push, 1)
 
@@ -111,6 +171,59 @@ typedef struct {
 	char sig[4];
 
 } mod_file_header;
+
+//S3M structures
+typedef struct {
+	char name[28];
+	uint8_t type;
+	uint16_t reserved;
+	uint16_t num_orders;
+	uint16_t num_instruments;
+	uint16_t num_patterns;
+	uint16_t flags;
+	uint16_t tracker_version;
+	uint16_t file_version;
+	uint8_t global_volume;
+	uint8_t initial_speed;
+	uint8_t initial_tempo;
+	uint8_t master_volume;
+	uint8_t ultra_click_removal;
+	uint8_t default_pan;
+	uint8_t reserved2[8];
+	uint8_t special;
+	char sig[4];
+} s3m_file_header;
+
+typedef struct {
+	uint8_t type;
+	uint8_t filename[12];
+	uint8_t reserved;
+	uint8_t volume;
+	uint8_t c2spd;
+	uint8_t reserved2[4];
+	uint8_t pack;
+	uint8_t flags;
+	uint32_t c2spd_fine;
+	uint8_t reserved3[12];
+	uint8_t name[28];
+	uint8_t magic[4];
+} s3m_instrument_header;
+
+typedef struct {
+	uint16_t length;
+	uint8_t type;
+	uint8_t reserved;
+	uint16_t loop_start;
+	uint16_t loop_end;
+	uint8_t volume;
+	uint8_t reserved2;
+	uint8_t pack;
+	uint8_t flags;
+	uint32_t c2spd;
+	uint8_t reserved3[12];
+	uint8_t name[28];
+	uint8_t magic[4];
+} s3m_sample_header;
 
 static const uint16_t rr_array[] = {22500, 21818, 21176, 20571, 20000, 19459, 18947, 18461, 18000, 17560, 17142, 16744, 65454, 64000, 62608, 61276, 60000, 58775, 57600, 56470, 55384, 54339, 53333, 52363, 51428, 50526, 49655, 48813, 48000, 47213, 46451, 45714, 45000, 44307, 43636, 42985, 42352, 41739, 41142, 40563, 40000, 39452, 38918, 38400, 37894, 37402, 36923, 36455, 36000, 35555, 35121, 34698, 34285, 33882, 33488, 33103, 32727, 32359, 32000, 31648, 31304, 30967, 30638, 30315, 30000, 29690, 29387, 29090, 28800, 28514, 28235, 27961, 27692, 27428, 27169, 26915, 26666, 26422, 26181, 25945, 25714, 25486, 25263, 25043, 24827, 24615, 24406, 24201, 24000, 23801, 23606, 23414, 23225, 23040, 22857, 22677, 22500, 22325, 22153, 21984, 21818, 21654, 21492, 21333, 21176, 21021, 20869, 20719, 20571, 20425, 20281, 20139, 20000, 19862, 19726, 19591, 19459, 19328, 19200, 19072, 18947, 18823, 18701, 18580, 18461, 18343, 18227, 18113, 18000, 17888, 17777, 17668, 17560, 17454, 17349, 17245, 17142, 17041, 16941, 16842, 16744, 16647, 16551, 16457, 65454, 65084, 64719, 64357, 64000, 63646, 63296, 62950, 62608, 62270, 61935, 61604, 61276, 60952, 60631, 60314, 60000, 59689, 59381, 59076, 58775, 58477, 58181, 57889, 57600, 57313, 57029, 56748, 56470, 56195, 55922, 55652, 55384, 55119, 54857, 54597, 54339, 54084, 53831, 53581, 53333, 53087, 52844, 52602, 52363, 52126, 51891, 51659, 51428, 51200, 50973, 50748, 50526, 50305, 50086, 49870, 49655, 49442, 49230, 49021, 48813, 48607, 48403, 48200, 48000, 47800, 47603, 47407, 47213, 47020, 46829, 46639, 46451, 46265, 46080, 45896, 45714, 45533, 45354, 45176};
 static const uint8_t div_array[] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
@@ -143,6 +256,39 @@ typedef struct {
 	bool channel_disabled[MAX_CHANNELS];
 
 } mod_header;
+
+//Extended header structure to support both MOD and S3M
+typedef struct {
+	file_format_t format;
+	union {
+		mod_file_header mod_header;
+		s3m_file_header s3m_header;
+	} header_data;
+	uint8_t pattern_max;
+	uint8_t channels;
+	uint8_t *pattern_buffer;
+	uint8_t current_speed;
+	uint8_t current_bpm;
+	uint8_t current_order;
+	uint8_t current_row;
+	bool	pattern_break_pending;
+	bool	order_break_pending;
+	uint8_t new_order;
+	uint8_t new_row;
+	uint8_t sample_total;	
+	bool sample_live[32];
+	uint8_t sample_volume[32];	
+	uint8_t sample_channel[32];
+	bool bad_samples;
+	uint24_t pd_hz;
+	uint8_t tick_no;
+	
+	uint8_t row_repeat;
+	bool row_repeat_live;
+
+	bool channel_disabled[MAX_CHANNELS];
+
+} extended_header;
 
 typedef struct {
 
@@ -1978,6 +2124,41 @@ void update_viz() {
 
 	switch_buffers();
 
+}
+
+//S3M support functions
+file_format_t detect_file_format(const char* filename) {
+	FILE* test_file = fopen(filename, "rb");
+	if (!test_file) return FORMAT_MOD; // Default to MOD if can't open
+	
+	char sig[4];
+	fread(sig, 1, 4, test_file);
+	fclose(test_file);
+	
+	// Check for S3M signature
+	if (strncmp(sig, "SCRM", 4) == 0) {
+		return FORMAT_S3M;
+	}
+	
+	// Check for MOD signatures
+	if (strncmp(sig, "M.K.", 4) == 0 || 
+		strncmp(sig, "FLT4", 4) == 0 ||
+		strncmp(sig, "6CHN", 4) == 0 ||
+		strncmp(sig, "8CHN", 4) == 0) {
+		return FORMAT_MOD;
+	}
+	
+	// Default to MOD for unknown formats
+	return FORMAT_MOD;
+}
+
+void convert_16bit_to_8bit(uint8_t* dest, const int16_t* src, uint16_t length) {
+	for (uint16_t i = 0; i < length; i++) {
+		// Convert 16-bit signed (-32768 to 32767) to 8-bit unsigned (0 to 255)
+		int32_t sample = src[i];
+		sample = (sample + 32768) >> 8; // Shift and offset to 8-bit range
+		dest[i] = (uint8_t)clamp_volume(sample);
+	}
 }
 
 void on_tick()
