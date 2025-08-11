@@ -208,19 +208,19 @@ typedef struct {
 } s3m_instrument_header;
 
 typedef struct {
-	uint16_t length;
-	uint8_t type;
-	uint8_t reserved;
-	uint16_t loop_start;
-	uint16_t loop_end;
-	uint8_t volume;
-	uint8_t reserved2;
-	uint8_t pack;
-	uint8_t flags;
-	uint32_t c2spd;
-	uint8_t reserved3[12];
-	uint8_t name[28];
-	uint8_t magic[4];
+	uint8_t type;           // Sample type (0 = none, 1 = PCM, 2 = ADPCM)
+	uint8_t reserved[3];    // Reserved
+	uint32_t length;        // Sample length in words (16-bit)
+	uint32_t loop_start;    // Loop start position
+	uint32_t loop_end;      // Loop end position
+	uint8_t volume;         // Default volume
+	uint8_t reserved2[3];   // Reserved
+	uint8_t pack;           // Packing type
+	uint8_t flags;          // Flags
+	uint32_t c2spd;         // C2 frequency
+	uint8_t reserved3[12];  // Reserved
+	char name[28];          // Sample name
+	char magic[4];          // "SCRS" signature
 } s3m_sample_header;
 
 static const uint16_t rr_array[] = {22500, 21818, 21176, 20571, 20000, 19459, 18947, 18461, 18000, 17560, 17142, 16744, 65454, 64000, 62608, 61276, 60000, 58775, 57600, 56470, 55384, 54339, 53333, 52363, 51428, 50526, 49655, 48813, 48000, 47213, 46451, 45714, 45000, 44307, 43636, 42985, 42352, 41739, 41142, 40563, 40000, 39452, 38918, 38400, 37894, 37402, 36923, 36455, 36000, 35555, 35121, 34698, 34285, 33882, 33488, 33103, 32727, 32359, 32000, 31648, 31304, 30967, 30638, 30315, 30000, 29690, 29387, 29090, 28800, 28514, 28235, 27961, 27692, 27428, 27169, 26915, 26666, 26422, 26181, 25945, 25714, 25486, 25263, 25043, 24827, 24615, 24406, 24201, 24000, 23801, 23606, 23414, 23225, 23040, 22857, 22677, 22500, 22325, 22153, 21984, 21818, 21654, 21492, 21333, 21176, 21021, 20869, 20719, 20571, 20425, 20281, 20139, 20000, 19862, 19726, 19591, 19459, 19328, 19200, 19072, 18947, 18823, 18701, 18580, 18461, 18343, 18227, 18113, 18000, 17888, 17777, 17668, 17560, 17454, 17349, 17245, 17142, 17041, 16941, 16842, 16744, 16647, 16551, 16457, 65454, 65084, 64719, 64357, 64000, 63646, 63296, 62950, 62608, 62270, 61935, 61604, 61276, 60952, 60631, 60314, 60000, 59689, 59381, 59076, 58775, 58477, 58181, 57889, 57600, 57313, 57029, 56748, 56470, 56195, 55922, 55652, 55384, 55119, 54857, 54597, 54339, 54084, 53831, 53581, 53333, 53087, 52844, 52602, 52363, 52126, 51891, 51659, 51428, 51200, 50973, 50748, 50526, 50305, 50086, 49870, 49655, 49442, 49230, 49021, 48813, 48607, 48403, 48200, 48000, 47800, 47603, 47407, 47213, 47020, 46829, 46639, 46451, 46265, 46080, 45896, 45714, 45533, 45354, 45176};
@@ -325,9 +325,9 @@ uint8_t sine_table[] = {
 
 #pragma pack(pop)
 
-static mod_header mod;
+static extended_header mod;
 //static channel_data *channels_data = NULL;
-static channel_data channels_data[8];
+static channel_data channels_data[MAX_CHANNELS];
 static FILE *file;
 static uint8_t old_mode;
 static int16_t global_volume = 100;
@@ -1240,7 +1240,7 @@ void dispatch_channel(uint8_t i) {
 		
 		channels_data[i].current_hz = channels_data[i].tuned_period > 0 ? mod.pd_hz / channels_data[i].tuned_period : 0;
 
-		if (swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, scale_volume(channels_data[i].current_volume), -1, channels_data[i].current_hz);
+		if (swap_word(mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) play_sample(channels_data[i].latched_sample, i, scale_volume(channels_data[i].current_volume), -1, channels_data[i].current_hz);
 		else play_sample(channels_data[i].latched_sample, i, scale_volume(channels_data[i].current_volume), 0, channels_data[i].current_hz);
 		if (channels_data[i].current_effect == EFFECT_OFFSET) set_position(i, channels_data[i].latched_offset);
 		mod.sample_volume[channels_data[i].latched_sample] = channels_data[i].current_volume;
@@ -1414,7 +1414,7 @@ void handle_breaks() {
 
 	} else if (mod.pattern_break_pending) { //Just a pattern break (0x0D)
 
-		if (mod.current_order > mod.header.num_orders - 1) mod.current_order = 0; //Handle 0x0D at end of a song.
+		if (mod.current_order > mod.header_data.mod_header.num_orders - 1) mod.current_order = 0; //Handle 0x0D at end of a song.
 		mod.current_row = mod.new_row;
 		if (mod.current_row < 63) mod.current_order++;
 		mod.pattern_break_pending = false;
@@ -1544,10 +1544,10 @@ void process_note(size_t pattern_no, size_t row)  {
 				mod.sample_channel[channels_data[i].latched_sample] = i;
 			}
 			channels_data[i].latched_sample = sample_number;
-			channels_data[i].finetune = mod.header.sample[channels_data[i].latched_sample - 1].FINE_TUNE;
+			channels_data[i].finetune = mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].FINE_TUNE;
 			mod.sample_channel[channels_data[i].latched_sample] = i;
-			//channels_data[i].latched_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME * 2) - 1);	
-			channels_data[i].current_volume = clamp_volume((mod.header.sample[channels_data[i].latched_sample - 1].VOLUME));
+					//channels_data[i].latched_volume = clamp_volume((mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].VOLUME * 2) - 1);	
+		channels_data[i].current_volume = clamp_volume((mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].VOLUME));
 			set_volume(i, scale_volume(channels_data[i].current_volume));
 
 			if (period > 0 && (effect_number != EFFECT_PORTA_NOTE) && (effect_number != EFFECT_VOL_TONE)) {
@@ -1556,9 +1556,9 @@ void process_note(size_t pattern_no, size_t row)  {
 				
 				dispatch_channel(i);
 
-			} else if (period > 0 && ((effect_number == EFFECT_PORTA_NOTE) || (effect_number == EFFECT_VOL_TONE)) && swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) {
+			} else if (period > 0 && ((effect_number == EFFECT_PORTA_NOTE) || (effect_number == EFFECT_VOL_TONE)) && swap_word(mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) > 1) {
 
-				channels_data[i].latched_offset = swap_word(mod.header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2;
+				channels_data[i].latched_offset = swap_word(mod.header_data.mod_header.sample[channels_data[i].latched_sample - 1].LOOP_LENGTH) * 2;
 				dispatch_channel(i);
 
 			}
@@ -2076,7 +2076,7 @@ void draw_sample_bars() {
 	set_text_window(0,26,20,25);
 	putch(17);
 	putch(15); //White row text
-	printf(" Page %03u of %03u", mod.current_order + 1, mod.header.num_orders);
+			printf(" Page %03u of %03u", mod.current_order + 1, mod.header_data.mod_header.num_orders);
 
 	//BPM/Speed update
 
@@ -2129,16 +2129,21 @@ file_format_t detect_file_format(const char* filename) {
 	FILE* test_file = fopen(filename, "rb");
 	if (!test_file) return FORMAT_MOD; // Default to MOD if can't open
 	
+	// Check for S3M signature at offset 0x2C
+	fseek(test_file, 0x2C, SEEK_SET);
 	char sig[4];
 	fread(sig, 1, 4, test_file);
-	fclose(test_file);
 	
-	// Check for S3M signature
 	if (strncmp(sig, "SCRM", 4) == 0) {
+		fclose(test_file);
 		return FORMAT_S3M;
 	}
 	
-	// Check for MOD signatures
+	// Check for MOD signatures at beginning of file
+	fseek(test_file, 0, SEEK_SET);
+	fread(sig, 1, 4, test_file);
+	fclose(test_file);
+	
 	if (strncmp(sig, "M.K.", 4) == 0 || 
 		strncmp(sig, "FLT4", 4) == 0 ||
 		strncmp(sig, "6CHN", 4) == 0 ||
@@ -2171,9 +2176,9 @@ void on_tick()
 			mid_tick = 0;
 
 			handle_breaks();
-			process_note(mod.header.order[mod.current_order], mod.current_row++);		
+			process_note(mod.header_data.mod_header.order[mod.current_order], mod.current_row++);		
 			#if !defined(VERBOSE) && !defined(VIZ) && !defined(HEADLESS)
-			printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+			printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header_data.mod_header.num_orders, mod.current_row);
 			#endif
 			
 			#ifdef VERBOSE
@@ -2186,8 +2191,8 @@ void on_tick()
 			if (mod.current_row == 64 && !(mod.order_break_pending)) {
 
 				mod.current_order++;
-				if ((mod.current_order) > mod.header.num_orders - 1) mod.current_order = 0;
-				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header.order[mod.current_order]);
+				if ((mod.current_order) > mod.header_data.mod_header.num_orders - 1) mod.current_order = 0;
+				//printf("\r\nOrder %u (Pattern %u)\r\n", mod.current_order, mod.header_data.mod_header.order[mod.current_order]);
 				//header_line();
 				mod.current_row = 0;
 			}
@@ -2287,41 +2292,163 @@ int main(int argc, char * argv[])
 			s3m_header.name, mod.channels, s3m_header.num_orders, s3m_header.num_patterns);
 		#endif
 		
-		// TODO: Load S3M patterns and samples
-		// For now, just skip to end of file to avoid crashes
-		fseek(file, 0, SEEK_END);
-		long file_size = ftell(file);
+		// Load S3M samples
 		#ifndef HEADLESS
-		printf("S3M file size: %ld bytes\r\n", file_size);
+		printf("Loading S3M samples...\r\n");
 		#endif
 		
-		// Set a default pattern for now
-		mod.pattern_max = 0;
+		// Skip order list (already read)
+		// Skip pattern list (we'll implement pattern loading later)
+		
+		// Read sample headers
+		uint32_t sample_offsets[256]; // Sample data offsets
+		uint32_t sample_lengths[256]; // Sample lengths
+		uint32_t sample_loop_starts[256]; // Loop start positions
+		uint32_t sample_loop_ends[256]; // Loop end positions
+		uint8_t sample_volumes[256]; // Sample volumes
+		
+		// Read sample headers
+		for (uint8_t i = 0; i < s3m_header.num_instruments; i++) {
+			s3m_sample_header sample_header;
+			fread(&sample_header, sizeof(s3m_sample_header), 1, file);
+			
+			// Validate sample header signature
+			if (strncmp(sample_header.magic, "SCRS", 4) != 0) {
+				#ifndef HEADLESS
+				printf("Warning: Invalid sample header signature for sample %d\r\n", i);
+				#endif
+				continue;
+			}
+			
+			// Store sample info
+			sample_lengths[i] = sample_header.length;
+			sample_loop_starts[i] = sample_header.loop_start;
+			sample_loop_ends[i] = sample_header.loop_end;
+			sample_volumes[i] = sample_header.volume;
+			
+			#ifndef HEADLESS
+			printf("Sample %d: %s, length: %d, loop: %d-%d, volume: %d\r\n", 
+				i, sample_header.name, sample_header.length, 
+				sample_header.loop_start, sample_header.loop_end, sample_header.volume);
+			#endif
+		}
+		
+		// Calculate sample data start position
+		// After all sample headers, sample data starts
+		uint32_t sample_data_start = ftell(file);
+		
+		// Now read and upload samples
 		mod.sample_total = 0;
+		for (uint8_t i = 0; i < s3m_header.num_instruments; i++) {
+			if (sample_lengths[i] > 0) {
+				// Calculate sample data offset
+				uint32_t sample_offset = sample_data_start;
+				for (uint8_t j = 0; j < i; j++) {
+					sample_offset += sample_lengths[j] * 2; // 16-bit samples
+				}
+				
+				// Seek to sample data
+				fseek(file, sample_offset, SEEK_SET);
+				
+				// Read 16-bit sample data
+				uint32_t sample_size = sample_lengths[i] * 2; // 16-bit samples
+				uint8_t temp_sample_buffer[512]; // Increased buffer size
+				
+				if (sample_size <= sizeof(temp_sample_buffer)) {
+					// Sample fits in buffer
+					clear_buffer(i);
+					
+					// Read 16-bit data
+					int16_t* sample_16bit = (int16_t*)temp_sample_buffer;
+					fread(sample_16bit, sizeof(int16_t), sample_lengths[i], file);
+					
+					// Convert to 8-bit
+					uint8_t* sample_8bit = (uint8_t*)temp_sample_buffer;
+					convert_16bit_to_8bit(sample_8bit, sample_16bit, sample_lengths[i]);
+					
+					// Upload to Agon
+					add_stream_to_buffer(i, (char*)sample_8bit, sample_lengths[i]);
+					
+				} else {
+					// Sample needs multiple chunks
+					clear_buffer(i);
+					uint32_t remaining_data = sample_size;
+					uint32_t bytes_read = 0;
+					
+					while (remaining_data > 0) {
+						uint32_t chunk_size = (remaining_data > sizeof(temp_sample_buffer)) ? 
+							sizeof(temp_sample_buffer) : remaining_data;
+						
+						// Read 16-bit chunk
+						int16_t* sample_16bit = (int16_t*)temp_sample_buffer;
+						uint32_t words_to_read = chunk_size / 2;
+						fread(sample_16bit, sizeof(int16_t), words_to_read, file);
+						
+						// Convert to 8-bit
+						uint8_t* sample_8bit = (uint8_t*)temp_sample_buffer;
+						convert_16bit_to_8bit(sample_8bit, sample_16bit, words_to_read);
+						
+						// Upload chunk to Agon
+						add_stream_to_buffer(i, (char*)sample_8bit, words_to_read);
+						
+						remaining_data -= chunk_size;
+						bytes_read += chunk_size;
+					}
+				}
+				
+				// Set sample properties
+				mod.sample_live[i] = true;
+				mod.sample_volume[i] = sample_volumes[i];
+				
+				// Set loop points if they exist
+				if (sample_loop_ends[i] > sample_loop_starts[i] && sample_loop_ends[i] > 1) {
+					set_sample_loop_start(i, sample_loop_starts[i] * 2);
+					set_sample_loop_length(i, (sample_loop_ends[i] - sample_loop_starts[i]) * 2);
+				}
+				
+				// Set sample frequency (C2 note = 8363 Hz)
+				tuneable_sample_from_buffer(i, 8363);
+				
+				mod.sample_total++;
+				
+				#ifndef HEADLESS
+				printf("\rUploading sample: %02u", i);
+				#endif
+			} else {
+				mod.sample_live[i] = false;
+			}
+		}
+		
+		#ifndef HEADLESS
+		printf("\r\n");
+		#endif
+		
+		// Set pattern info for now
+		mod.pattern_max = s3m_header.num_patterns - 1;
 		
 	} else {
 		// Handle MOD file (existing code)
-		fread(&mod.header, sizeof(mod_file_header), 1, file);
+		fread(&mod.header_data.mod_header, sizeof(mod_file_header), 1, file);
 
-	if (strncmp(mod.header.sig, "M.K.", 4) == 0) {
+	if (strncmp(mod.header_data.mod_header.sig, "M.K.", 4) == 0) {
 		mod.channels = 4; //Classic 4 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, RATE_4_CHAN);
 		#endif
 	}
-	else if (strncmp(mod.header.sig, "FLT4", 4) == 0) {
+	else if (strncmp(mod.header_data.mod_header.sig, "FLT4", 4) == 0) {
 		mod.channels = 4; //Startrekker 4 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, RATE_4_CHAN);
 		#endif		
 	}
-	else if (strncmp(mod.header.sig, "6CHN", 4) == 0) {
+	else if (strncmp(mod.header_data.mod_header.sig, "6CHN", 4) == 0) {
 		mod.channels = 6; //6 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, RATE_6_CHAN);
 		#endif		
 	}
-	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) {
+	else if (strncmp(mod.header_data.mod_header.sig, "8CHN", 4) == 0) {
 		mod.channels = 8; //8 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, RATE_8_CHAN);
@@ -2348,7 +2475,7 @@ int main(int argc, char * argv[])
 
 	for (uint8_t i = 1; i < 31; i++) mod.sample_volume[i] = 0;
 
-	for (uint8_t i = 0; i < 127; i++) if (mod.header.order[i] > mod.pattern_max) mod.pattern_max = mod.header.order[i];
+	for (uint8_t i = 0; i < 127; i++) if (mod.header_data.mod_header.order[i] > mod.pattern_max) mod.pattern_max = mod.header_data.mod_header.order[i];
 
 	#ifndef HEADLESS
 	printf("Reading pattern data...\r\n");
@@ -2364,9 +2491,9 @@ int main(int argc, char * argv[])
 
 	for (uint8_t i = 1; i < 31; i++) {
 
-		uint16_t sample_length_swapped = swap_word(mod.header.sample[i - 1].SAMPLE_LENGTH);
-		uint16_t sample_loop_start_swapped = swap_word(mod.header.sample[i - 1].LOOP_START);
-		uint16_t sample_loop_length_swapped = swap_word(mod.header.sample[i - 1].LOOP_LENGTH);
+		uint16_t sample_length_swapped = swap_word(mod.header_data.mod_header.sample[i - 1].SAMPLE_LENGTH);
+		uint16_t sample_loop_start_swapped = swap_word(mod.header_data.mod_header.sample[i - 1].LOOP_START);
+		uint16_t sample_loop_length_swapped = swap_word(mod.header_data.mod_header.sample[i - 1].LOOP_LENGTH);
 
 		if (sample_length_swapped > 0) {
 
@@ -2375,10 +2502,10 @@ int main(int argc, char * argv[])
 
 			// if (1) {
 			// 	printf("Uploading sample %u", i);
-			// 	printf(" %02u bytes, def. vol %02X", (sample_length_swapped * 2), mod.header.sample[i - 1].VOLUME);			
+			// 	printf(" %02u bytes, def. vol %02X", (sample_length_swapped * 2), mod.header_data.mod_header.sample[i - 1].VOLUME);			
 			// 	printf(", loop start %05u", sample_loop_start_swapped * 2);
 			// 	printf(", loop length %05u", sample_loop_length_swapped * 2);
-			// 	printf(", finetune byte %u", mod.header.sample[i - 1].FINE_TUNE);
+			// 	printf(", finetune byte %u", mod.header_data.mod_header.sample[i - 1].FINE_TUNE);
 			// 	printf("\r\n");
 			// 	return 0;
 			// }
@@ -2498,7 +2625,7 @@ int main(int argc, char * argv[])
 		printf("Agon_MOD (v%03u)", VERSION);
 		if (mod.pd_hz != PD_HZ) printf(" [%06u]", mod.pd_hz);
 		printf("\r\n\r\n");
-		printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header.name);
+		printf("Mod title:\r\n%.20s\r\n\r\nVol \r\n\r\n", mod.header_data.mod_header.name);
 	
 		for (uint8_t i = 1; i < 32;) {
 
@@ -2547,9 +2674,9 @@ int main(int argc, char * argv[])
 	
 	#endif
 
-	//process_note(mod.header.order[mod.current_order], mod.current_row++);
+			//process_note(mod.header_data.mod_header.order[mod.current_order], mod.current_row++);
 	// #if !defined(VERBOSE) && !defined(VIZ) && !defined(HEADLESS)
-	// printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header.num_orders, mod.current_row);
+	// printf("\rPlaying song page %03u/%03u row %02u, press ESCAPE to exit.", mod.current_order + 1, mod.header_data.mod_header.num_orders, mod.current_row);
 	// #endif
 
 	#ifdef VERBOSE
