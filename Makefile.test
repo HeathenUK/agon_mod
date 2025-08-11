@@ -1,0 +1,26 @@
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -DHEADLESS -DVERBOSE -DVIZ
+TARGET = test_playmod
+SOURCES = src/main.c
+OBJECTS = $(SOURCES:.c=.o)
+
+# Default target
+all: $(TARGET)
+
+# Link the executable
+$(TARGET): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(TARGET)
+
+# Compile source files
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Clean up
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+
+# Test compilation only (don't link)
+test-compile: $(OBJECTS)
+	@echo "Compilation successful!"
+
+.PHONY: all clean test-compile
