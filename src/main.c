@@ -7,7 +7,7 @@
 #include <string.h>
 #include <mos_api.h>
 
-#define VERSION 11
+#define VERSION 12
 
 //Settings
 
@@ -982,14 +982,15 @@ void handle_exit(const char* exit_message, bool tidy) {
 
 	#if defined(VIZ) || defined(VERBOSE)
 
-		clear_assets();
-
-		putch(17);
-		putch(15);
-		printf("\r\n"); 
 
 		if (tidy == true) {
 			
+			clear_assets();
+
+			putch(17);	// reset font foreground colour to white
+			putch(15);
+			printf("\r\n");
+
 			if (sv->scrMode != old_mode) {
 				putch(22);
 				putch(old_mode);
@@ -2045,12 +2046,16 @@ int main(int argc, char * argv[])
 	}
 	#endif
 
+	#ifndef HEADLESS
+	printf("Agon_MOD (v%03u)\r\n", VERSION);
+	#endif
+
 	#ifdef PRINT_DEBUG
 	print_to_debug("\r\nDebug starting.\r\n");
 	#endif
 
 	if (argc < 2) {
-		handle_exit("Usage is playmod <file> [alternative magic number]", false);
+		handle_exit("Usage: playmod <file> [alternative magic number]", false);
 		return 0;
 	}
 
@@ -2075,8 +2080,7 @@ int main(int argc, char * argv[])
 		return 0;
     }
 	
-	#ifndef HEADLESS
-	printf("Agon_MOD (v%03u)\r\n", VERSION);	
+	#ifndef HEADLESS	
 	printf("Reading .MOD header\r\n");
 	#endif
 
@@ -2094,6 +2098,12 @@ int main(int argc, char * argv[])
 		set_channel_rate(-1, RATE_4_CHAN);
 		#endif		
 	}
+	else if (strncmp(mod.header.sig, "4CHN", 4) == 0) {
+		mod.channels = 4; //Startrekker 4 channels
+		#ifdef VARIABLE_RATE
+		set_channel_rate(-1, RATE_4_CHAN);
+		#endif		
+	}
 	else if (strncmp(mod.header.sig, "6CHN", 4) == 0) {
 		mod.channels = 6; //6 channels
 		#ifdef VARIABLE_RATE
@@ -2101,6 +2111,12 @@ int main(int argc, char * argv[])
 		#endif		
 	}
 	else if (strncmp(mod.header.sig, "8CHN", 4) == 0) {
+		mod.channels = 8; //8 channels
+		#ifdef VARIABLE_RATE
+		set_channel_rate(-1, RATE_8_CHAN);
+		#endif				
+	}
+	else if (strncmp(mod.header.sig, "FLT8", 4) == 0) {
 		mod.channels = 8; //8 channels
 		#ifdef VARIABLE_RATE
 		set_channel_rate(-1, RATE_8_CHAN);
